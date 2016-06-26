@@ -155,6 +155,19 @@ RETURNING bgc_id
     print("bgc_id: {}".format(params['bgc_id']))
 
     for product in feature.qualifiers['product'][0].split('-'):
+        nx_create_rel_clusters_types(cur, params, product)
+
+    print(feature.qualifiers)
+
+
+def nx_create_rel_clusters_types(cur, params, product):
+    '''create relation table to bgc_types'''
+    cur.execute("""
+SELECT * FROM antismash.rel_clusters_types WHERE bgc_id = %s AND
+    bgc_type_id = (SELECT bgc_type_id FROM antismash.bgc_types WHERE term = %s)""",
+                (params['bgc_id'], product))
+    ret = cur.fetchone()
+    if ret is None:
         print("creating link for type {}".format(product))
         cur.execute("""
 INSERT INTO antismash.rel_clusters_types (bgc_id, bgc_type_id)
