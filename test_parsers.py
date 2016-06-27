@@ -1,6 +1,8 @@
+from collections import defaultdict
 from import_genbank import (
     parse_smcog,
     parse_specificity,
+    parse_ripp_core,
 )
 
 
@@ -54,4 +56,35 @@ def test_parse_specificity():
     fake = FakeFeature()
     fake.qualifiers['specificity'] = specificities
     parse_specificity(fake, params)
+    assert params == expected
+
+
+def test_parse_ripp_core():
+    '''Test parse_ripp_core'''
+    params = defaultdict(lambda: None)
+    notes = [
+        'Totally unrelated: nonsense',
+        'monoisotopic mass: 3333.6',
+        'molecular weight: 3336.0',
+        'alternative weights: 3354.0; 3372.1; 3390.1; 3408.1',
+        'number of bridges: 5',
+        'predicted core seq: ITSISLCTPGCKTGALMGCNMKTATCHCSIHVSK',
+        'predicted class: Class-I',
+        'score: 26.70',
+    ]
+
+    expected = {
+        'peptide_sequence': 'ITSISLCTPGCKTGALMGCNMKTATCHCSIHVSK',
+        'molecular_weight': '3336.0',
+        'monoisotopic_mass': '3333.6',
+        'alternative_weights': '3354.0; 3372.1; 3390.1; 3408.1',
+        'bridges': '5',
+        'class': 'Class-I',
+        'score': '26.70',
+    }
+
+    fake = FakeFeature()
+    fake.qualifiers['note'] = notes
+
+    parse_ripp_core(fake, params)
     assert params == expected

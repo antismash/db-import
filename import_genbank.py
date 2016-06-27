@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Import a GenBank results file into the antiSMASH database"""
 from __future__ import print_function
+from collections import defaultdict
 import hashlib
 import sys
 import re
@@ -215,7 +216,88 @@ def parse_smcog(feature):
 
 def handle_cds_motif(rec, cur, seq_id, feature):
     '''Handle CDS_motif features'''
-    pass
+    if 'aSTool' in feature.qualifiers:
+        # This is a CDS_motif from the nrpspks module, ignore
+        # We can find all info we need in the aSDomain record
+        return
+
+    if 'note' not in feature.qualifiers:
+        return
+
+    params = defaultdict(lambda: None)
+    params['bgc_id'] = get_bgc_id_from_overlap(cur, seq_id, feature)
+    parse_ripp_core(feature, params)
+    if params['peptide_sequence'] is None:
+        return
+
+    cur.execute("SELECT compound_id FROM antismash.compounds WHERE peptide_sequence = %(peptide_sequence)s", params)
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("""
+INSERT INTO antismash.compounds (
+    peptide_sequence,
+    molecular_weight,
+    monoisotopic_mass,
+    alternative_weights,
+    bridges,
+    class,
+    score
+) VALUES (
+    %(peptide_sequence)s,
+    %(molecular_weight)s,
+    %(monoisotopic_mass)s,
+    %(alternative_weights)s,
+    %(bridges)s,
+    %(class)s,
+    %(score)s
+) RETURNING compound_id""", params)
+        ret = cur.fetchone()
+
+    compound_id = ret[0]
+
+    cur.execute("SELECT bgc_id FROM antismash.rel_clusters_compounds WHERE bgc_id = %s AND compound_id = %s", (params['bgc_id'], compound_id))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.rel_clusters_compounds (bgc_id, compound_id) VALUES (%s, %s)", (params['bgc_id'], compound_id))
+
+
+def parse_ripp_core(feature, params):
+    for note in feature.qualifiers['note']:
+        if note.startswith('monoisotopic mass:'):
+            params['monoisotopic_mass'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('molecular weight:'):
+            params['molecular_weight'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('alternative weights:'):
+            params['alternative_weights'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('number of bridges:'):
+            params['bridges'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('predicted core seq:'):
+            params['peptide_sequence'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('predicted class:'):
+            params['class'] = note.split(':')[-1].strip()
+            continue
+        if note.startswith('score:'):
+            params['score'] = note.split(':')[-1].strip()
+            continue
+
+
+def get_bgc_id_from_overlap(cur, seq_id, feature):
+    '''query for bgc_ids that contain the feature'''
+    start_pos = feature.location.nofuzzy_start
+    end_pos = feature.location.nofuzzy_end
+    cur.execute("""
+SELECT bgc.bgc_id FROM antismash.biosynthetic_gene_clusters bgc JOIN antismash.loci l ON bgc.locus = l.locus_id
+    WHERE l.sequence = %s AND int4range(l.start_pos, l.end_pos) @> int4range(%s, %s)""", (seq_id, start_pos, end_pos))
+    ret = cur.fetchone()
+    if ret is None:
+        raise ValueError('No bgc found overlapping {}'.format(feature))
+
+    return ret[0]
 
 
 def handle_asdomain(rec, cur, seq_id, feature):
