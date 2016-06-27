@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Import a GenBank results file into the antiSMASH database"""
 from __future__ import print_function
-import sys
 import hashlib
+import sys
+import re
 from Bio import Entrez, SeqIO
 import psycopg2
 import psycopg2.extensions
@@ -11,6 +12,7 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
 DB_CONNECTION = "host='localhost' port=15432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
+SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w',/\s\(\)-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 
 
 def main():
@@ -128,36 +130,49 @@ def handle_cds(rec, cur, seq_id, feature):
     if ret is None:
         params['locus_tag'] = feature.qualifiers['locus_tag'][0]
         params['func_class'] = get_functional_class(cur, feature)
-        params['evidence'] = 'predicted'
-        params['smcog_id'] = get_smcog_id(cur, feature)
-        # TODO: Parse all of smcog and and create smcog_hit entry
+        params['evidence'] = 'prediction'
+        params['smcog_hit_id'] = None
+        params['translation'] = get_translation(feature)
+        try:
+            smcog_name, smcog_score, smcog_evalue = parse_smcog(feature)
+            smcog_score = float(smcog_score)
+            smcog_evalue = float(smcog_evalue)
+            smcog_id = get_smcog_id(cur, smcog_name)
+            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_class) VALUES (%s, %s, %s) RETURNING smcog_hit_id", (smcog_score, smcog_evalue, smcog_id))
+            params['smcog_hit_id'] = cur.fetchone()[0]
+        except ValueError:
+            pass
+
         cur.execute("""
-INSERT INTO antismash.genes (functional_class, locus_tag, locus, evidence) VALUES
+INSERT INTO antismash.genes (functional_class, locus_tag, locus, smcog_hit, translation, evidence) VALUES
 ( (SELECT functional_class_id FROM antismash.functional_classes WHERE name = %(func_class)s),
-  %(locus_tag)s, %(locus_id)s,
+  %(locus_tag)s, %(locus_id)s, %(smcog_hit_id)s, %(translation)s,
   (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) )
 """, params)
 
 
-def get_smcog_id(cur, feature):
-    '''Get the smcog_id given the smCOG identifier in a feature'''
-    try:
-        smcog = parse_smcog(feature)
-        cur.execute("SELECT smcog_id FROM antismash.smcogs WHERE name = %s", (smcog,))
-        ret = cur.fetchone()
-        if ret is None:
-            return None
-        return ret[0]
-
-    except ValueError:
+def get_translation(feature):
+    '''Get the protein translation from the feature'''
+    if 'translation' not in feature.qualifiers:
         return None
+
+    return feature.qualifiers['translation'][0]
+
+
+def get_smcog_id(cur, smcog):
+    '''Get the smcog_id given the smCOG identifier in a feature'''
+    cur.execute("SELECT smcog_id FROM antismash.smcogs WHERE name = %s", (smcog,))
+    ret = cur.fetchone()
+    if ret is None:
+        return None
+    return ret[0]
 
 
 def get_functional_class(cur, feature):
     '''Get the functional class from a CDS feature'''
     func_class = 'other'
     try:
-        smcog = parse_smcog(feature)
+        smcog, _, _ = parse_smcog(feature)
         cur.execute("""
 SELECT name FROM antismash.functional_classes WHERE functional_class_id =
     (SELECT functional_class FROM antismash.smcogs WHERE name = %s)""", (smcog,))
@@ -189,10 +204,13 @@ def parse_smcog(feature):
     for entry in feature.qualifiers['note']:
         if not entry.startswith('smCOG:'):
             continue
-        smcog = entry[7:].split(':')[0]
-        return smcog
+        match = SMCOG_PATTERN.search(entry)
+        if match is None:
+            print(entry)
+            raise ValueError('Failed to parse smCOG line {!r}'.format(entry))
+        return match.groups()
 
-    raise ValueError('No note qualifier in {}'.format(feature))
+    raise ValueError('No smcog qualifier in {}'.format(feature))
 
 
 def handle_cds_motif(rec, cur, seq_id, feature):
@@ -202,7 +220,108 @@ def handle_cds_motif(rec, cur, seq_id, feature):
 
 def handle_asdomain(rec, cur, seq_id, feature):
     '''Handle aSDomain features'''
-    pass
+    params = {}
+    params['pks_signature'] = None
+    params['minowa'] = None
+    params['nrps_predictor'] = None
+    params['stachelhaus'] = None
+    params['consensus'] = None
+    params['kr_activity'] = None
+    params['kr_stereochemistry'] = None
+    params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
+
+    cur.execute("SELECT as_domain_id FROM antismash.as_domains WHERE locus = %s", (params['locus_id'],))
+    ret = cur.fetchone()
+    if ret is None:
+        params['name'] = feature.qualifiers['domain'][0] if 'domain' in feature.qualifiers else None
+        params['database'] = feature.qualifiers['database'][0] if 'database' in feature.qualifiers else None
+        params['score'] = float(feature.qualifiers['score'][0]) if 'score' in feature.qualifiers else None
+        params['evalue'] = float(feature.qualifiers['evalue'][0]) if 'evalue' in feature.qualifiers else None
+        params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
+        params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
+        params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
+
+        parse_specificity(feature, params)
+
+        cur.execute("""
+INSERT INTO antismash.as_domains (
+    name,
+    database,
+    detection,
+    score,
+    evalue,
+    translation,
+    pks_signature,
+    minowa,
+    nrps_predictor,
+    stachelhaus,
+    consensus,
+    kr_activity,
+    kr_stereochemistry,
+    locus,
+    gene
+) VALUES (
+    %(name)s,
+    %(database)s,
+    %(detection)s,
+    %(score)s,
+    %(evalue)s,
+    %(translation)s,
+    %(pks_signature)s,
+    %(minowa)s,
+    %(nrps_predictor)s,
+    %(stachelhaus)s,
+    %(consensus)s,
+    %(kr_activity)s,
+    %(kr_stereochemistry)s,
+    %(locus_id)s,
+    (SELECT gene_id FROM antismash.genes WHERE locus_tag = %(locus_tag)s)
+) RETURNING as_domain_id""", params)
+        as_domain_id = cur.fetchone()[0]
+        if params['consensus'] is not None:
+            monomer_id = get_or_create_monomer(cur, params['consensus'])
+            cur.execute("SELECT as_domain_id FROM antismash.rel_as_domains_monomers WHERE as_domain_id = %s AND monomer_id = %s", (as_domain_id, monomer_id))
+            ret = cur.fetchone()
+            if ret is None:
+                cur.execute("INSERT INTO antismash.rel_as_domains_monomers (as_domain_id, monomer_id) VALUES (%s, %s)", (as_domain_id, monomer_id))
+
+
+def get_or_create_monomer(cur, name):
+    '''get the monomer_id for a monomer by name, create monomer entry if needed'''
+    cur.execute("SELECT monomer_id FROM antismash.monomers WHERE name = %s", (name,))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.monomers (name) VALUES (%s) RETURNING monomer_id", (name,))
+        ret = cur.fetchone()
+
+    return ret[0]
+
+
+def parse_specificity(feature, params):
+    '''parse the feature's specificity entries'''
+    if 'specificity' in feature.qualifiers:
+        for spec in feature.qualifiers['specificity']:
+            if spec.startswith('KR activity: '):
+                params['kr_activity'] = False if spec.endswith('inactive') else True
+                continue
+            if spec.startswith('KR stereochemistry: '):
+                params['kr_stereochemistry'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('NRPSpredictor2 SVM: '):
+                params['nrps_predictor'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('Stachelhaus code: '):
+                params['stachelhaus'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('Minowa: '):
+                params['minowa'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('PKS signature: '):
+                params['pks_signature'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('consensus: '):
+                params['consensus'] = spec.split(':')[-1].strip()
+                continue
 
 
 def handle_cluster(rec, cur, seq_id, feature):
