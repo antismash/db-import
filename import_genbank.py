@@ -120,7 +120,79 @@ def get_or_create_locus(cur, seq_id, feature):
 
 def handle_cds(rec, cur, seq_id, feature):
     '''Handle CDS features'''
-    pass
+    params = {}
+    params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
+
+    cur.execute("SELECT gene_id FROM antismash.genes WHERE locus = %s", (params['locus_id'],))
+    ret = cur.fetchone()
+    if ret is None:
+        params['locus_tag'] = feature.qualifiers['locus_tag'][0]
+        params['func_class'] = get_functional_class(cur, feature)
+        params['evidence'] = 'predicted'
+        params['smcog_id'] = get_smcog_id(cur, feature)
+        # TODO: Parse all of smcog and and create smcog_hit entry
+        cur.execute("""
+INSERT INTO antismash.genes (functional_class, locus_tag, locus, evidence) VALUES
+( (SELECT functional_class_id FROM antismash.functional_classes WHERE name = %(func_class)s),
+  %(locus_tag)s, %(locus_id)s,
+  (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) )
+""", params)
+
+
+def get_smcog_id(cur, feature):
+    '''Get the smcog_id given the smCOG identifier in a feature'''
+    try:
+        smcog = parse_smcog(feature)
+        cur.execute("SELECT smcog_id FROM antismash.smcogs WHERE name = %s", (smcog,))
+        ret = cur.fetchone()
+        if ret is None:
+            return None
+        return ret[0]
+
+    except ValueError:
+        return None
+
+
+def get_functional_class(cur, feature):
+    '''Get the functional class from a CDS feature'''
+    func_class = 'other'
+    try:
+        smcog = parse_smcog(feature)
+        cur.execute("""
+SELECT name FROM antismash.functional_classes WHERE functional_class_id =
+    (SELECT functional_class FROM antismash.smcogs WHERE name = %s)""", (smcog,))
+        ret = cur.fetchone()
+        if ret is not None:
+            func_class = ret[0]
+    except ValueError:
+        pass
+
+    if 'sec_met' not in feature.qualifiers:
+        return func_class
+
+    for entry in feature.qualifiers['sec_met']:
+        if entry.startswith('Kind: '):
+            func_class = entry[6:]
+            if func_class == 'biosynthetic':
+                func_class = 'bgc_seed'
+                return func_class
+            break
+
+    return func_class
+
+
+def parse_smcog(feature):
+    '''Parse the smCOG feature qualifier'''
+    if 'note' not in feature.qualifiers:
+        raise ValueError('No note qualifier in {}'.format(feature))
+
+    for entry in feature.qualifiers['note']:
+        if not entry.startswith('smCOG:'):
+            continue
+        smcog = entry[7:].split(':')[0]
+        return smcog
+
+    raise ValueError('No note qualifier in {}'.format(feature))
 
 
 def handle_cds_motif(rec, cur, seq_id, feature):
@@ -152,12 +224,9 @@ RETURNING bgc_id
         ret = cur.fetchone()
     params['bgc_id'] = ret[0]
 
-    print("bgc_id: {}".format(params['bgc_id']))
 
     for product in feature.qualifiers['product'][0].split('-'):
         nx_create_rel_clusters_types(cur, params, product)
-
-    print(feature.qualifiers)
 
 
 def nx_create_rel_clusters_types(cur, params, product):
@@ -168,7 +237,6 @@ SELECT * FROM antismash.rel_clusters_types WHERE bgc_id = %s AND
                 (params['bgc_id'], product))
     ret = cur.fetchone()
     if ret is None:
-        print("creating link for type {}".format(product))
         cur.execute("""
 INSERT INTO antismash.rel_clusters_types (bgc_id, bgc_type_id)
 SELECT val.bgc_id, f.bgc_type_id FROM ( VALUES (%s, %s) ) val (bgc_id, bgc_type)
