@@ -3,6 +3,7 @@ from import_genbank import (
     parse_smcog,
     parse_specificity,
     parse_ripp_core,
+    parse_monomers,
 )
 
 
@@ -88,3 +89,26 @@ def test_parse_ripp_core():
 
     parse_ripp_core(fake, params)
     assert params == expected
+
+
+def test_parse_monomers():
+    '''Test parse_monomers'''
+    tests = [
+        ('Monomers prediction: (ccmal) + (pk)', (['ccmal', 'pk'], '(ccmal) + (pk)')),
+        ('Monomers prediction: (orn-thr-orn)', (['orn', 'thr', 'orn'], '(orn-thr-orn)')),
+        ('Monomers prediction: (ser-thr-trp-asp-asp-hpg) + (asp-gly-asn) + (nrp-trp)',
+            (['ser', 'thr', 'trp', 'asp', 'asp', 'hpg', 'asp', 'gly', 'asn', 'nrp', 'trp'],
+             '(ser-thr-trp-asp-asp-hpg) + (asp-gly-asn) + (nrp-trp)')),
+        ('Monomers prediction: (cys) + (pk-mal)', (['cys', 'pk', 'mal'], '(cys) + (pk-mal)')),
+        ('Monomers prediction: (mal-ccmal-ccmal) + (ccmal-ccmal) + (ccmal)',
+            (['mal', 'ccmal', 'ccmal', 'ccmal', 'ccmal', 'ccmal'], '(mal-ccmal-ccmal) + (ccmal-ccmal) + (ccmal)')),
+        ('Monomers prediction: (nrp) + (cys)', (['nrp', 'cys'], '(nrp) + (cys)')),
+        ('Monomers prediction: (redmmal)', (['redmmal'], '(redmmal)')),
+        ('Monomers prediction: (dhb) + (nrp-cys) + (cys)', (['dhb', 'nrp', 'cys', 'cys'], '(dhb) + (nrp-cys) + (cys)')),
+        ('Total nonsense: here', ([], None)),
+    ]
+
+    for test_string, expected in tests:
+        fake = FakeFeature()
+        fake.qualifiers['note'] = [test_string]
+        assert parse_monomers(fake) == expected

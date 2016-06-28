@@ -429,6 +429,47 @@ RETURNING bgc_id
     for product in feature.qualifiers['product'][0].split('-'):
         nx_create_rel_clusters_types(cur, params, product)
 
+    monomer_list, monomer_str = parse_monomers(feature)
+    if monomer_str is None:
+        # We don't have a compound prediction at this stage
+        return
+
+    cur.execute("SELECT compound_id FROM antismash.compounds WHERE peptide_sequence = %s", (monomer_str,))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.compounds (peptide_sequence) VALUES (%s) RETURNING compound_id", (monomer_str,))
+        ret = cur.fetchone()
+    compound_id = ret[0]
+
+    cur.execute("SELECT bgc_id FROM antismash.rel_clusters_compounds WHERE bgc_id = %s AND compound_id = %s",
+                (params['bgc_id'], compound_id))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.rel_clusters_compounds (bgc_id, compound_id) VALUES (%s, %s)",
+                    (params['bgc_id'], compound_id))
+
+    for i, monomer in enumerate(monomer_list):
+        monomer_id = get_or_create_monomer(cur, monomer)
+        position = i + 1
+        cur.execute("SELECT position FROM antismash.rel_compounds_monomers WHERE compound_id = %s AND monomer_id = %s AND position = %s",
+                    (compound_id, monomer_id, position))
+        ret = cur.fetchone()
+        if ret is None:
+            cur.execute("""
+INSERT INTO antismash.rel_compounds_monomers (compound_id, monomer_id, position)
+    VALUES (%s, %s, %s)""", (compound_id, monomer_id, position))
+
+
+def parse_monomers(feature):
+    '''Parse a feature's monomoers string'''
+    for note in feature.qualifiers['note']:
+        if note.startswith('Monomers prediction: '):
+            monomers_str = note.split(':')[-1].strip()
+            monomers_condensed = monomers_str.replace('(', '').replace(')', '').replace(' ', '').replace('+', '-')
+            monomers = monomers_condensed.split('-')
+            return monomers, monomers_str
+    return [], None
+
 
 def nx_create_rel_clusters_types(cur, params, product):
     '''create relation table to bgc_types'''
