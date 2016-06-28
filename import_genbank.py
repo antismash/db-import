@@ -408,23 +408,27 @@ def parse_specificity(feature, params):
 
 def handle_cluster(rec, cur, seq_id, feature):
     '''Handle cluster features'''
-    params = {}
+    params = defaultdict(lambda: None)
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
     params['evidence'] = 'prediction'
     print("locus_id: {}".format(params['locus_id']))
+
+    for note in feature.qualifiers['note']:
+        if note.startswith('Cluster number: '):
+            params['cluster_number'] = note.split(':')[-1].strip()
+
     cur.execute("SELECT bgc_id FROM antismash.biosynthetic_gene_clusters WHERE locus = %(locus_id)s", params)
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
-INSERT INTO antismash.biosynthetic_gene_clusters (locus, evidence)
-SELECT val.locus, f.evidence_id FROM (
-    VALUES (%(locus_id)s, %(evidence)s) ) val (locus, evidence)
+INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus, evidence)
+SELECT val.cluster_number::int4, val.locus, f.evidence_id FROM (
+    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s) ) val (cluster_number, locus, evidence)
 LEFT JOIN antismash.evidences f ON val.evidence = f.name
 RETURNING bgc_id
 """, params)
         ret = cur.fetchone()
     params['bgc_id'] = ret[0]
-
 
     for product in feature.qualifiers['product'][0].split('-'):
         nx_create_rel_clusters_types(cur, params, product)
