@@ -433,6 +433,10 @@ RETURNING bgc_id
     for product in feature.qualifiers['product'][0].split('-'):
         nx_create_rel_clusters_types(cur, params, product)
 
+    store_clusterblast(cur, feature, 'clusterblast', params['bgc_id'])
+    store_clusterblast(cur, feature, 'knownclusterblast', params['bgc_id'])
+    store_clusterblast(cur, feature, 'subclusterblast', params['bgc_id'])
+
     monomer_list, monomer_str = parse_monomers(feature)
     if monomer_str is None:
         # We don't have a compound prediction at this stage
@@ -462,6 +466,43 @@ RETURNING bgc_id
             cur.execute("""
 INSERT INTO antismash.rel_compounds_monomers (compound_id, monomer_id, position)
     VALUES (%s, %s, %s)""", (compound_id, monomer_id, position))
+
+
+def store_clusterblast(cur, feature, algorithm, bgc_id):
+    '''Store XClusterBlast results in the database'''
+    if algorithm not in feature.qualifiers:
+        return
+
+    cur.execute("SELECT algorithm_id FROM antismash.clusterblast_algorithms WHERE name = %s", (algorithm, ))
+    ret = cur.fetchone()
+    if ret is None:
+        print('Did not find algorithm_id for {!r}!'.format(algorithm))
+        return
+
+    algorithm_id = ret[0]
+    for entry in feature.qualifiers[algorithm]:
+        params = parse_clusterblast_line(entry)
+        params['algorithm_id'] = algorithm_id
+        params['bgc_id'] = bgc_id
+        cur.execute("SELECT clusterblast_hit_id FROM antismash.clusterblast_hits WHERE bgc_id = %(bgc_id)s AND algorithm_id = %(algorithm_id)s AND acc = %(acc)s", params)
+        ret = cur.fetchone()
+        if ret is None:
+            cur.execute("""
+INSERT INTO antismash.clusterblast_hits (rank, acc, description, similarity, algorithm_id, bgc_id) VALUES
+    (%(rank)s, %(acc)s, %(description)s, %(similarity)s, %(algorithm_id)s, %(bgc_id)s)""", params)
+
+
+def parse_clusterblast_line(line):
+    '''Parse a clusterblast result line'''
+    pattern = r'([\d]+)\. ([\w]+)\s+([\w,.;/& \(\)-]+)\(([\d]+)%'
+    m = re.search(pattern, line)
+    res = {
+        'rank': int(m.group(1)),
+        'acc': m.group(2),
+        'description': m.group(3).strip(),
+        'similarity': int(m.group(4))
+    }
+    return res
 
 
 def parse_monomers(feature):

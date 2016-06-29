@@ -4,6 +4,7 @@ from import_genbank import (
     parse_specificity,
     parse_ripp_core,
     parse_monomers,
+    parse_clusterblast_line,
 )
 
 
@@ -112,3 +113,29 @@ def test_parse_monomers():
         fake = FakeFeature()
         fake.qualifiers['note'] = [test_string]
         assert parse_monomers(fake) == expected
+
+
+def test_parse_clusterblast_line():
+    '''Test parse_clusterblast_line'''
+    tests = [
+        ('1. CP002365_c2       Lactococcus lactis subsp. lactis CV56, complete genome. (60% of genes show similarity)',
+            {'rank': 1, 'acc': 'CP002365_c2', 'description': 'Lactococcus lactis subsp. lactis CV56, complete genome.',
+             'similarity': 60}),
+        ('10. AEXT01000007_c1  Streptococcus agalactiae FSL S3-026 contig07, whole genom... (26% of genes show similarity)',
+            {'rank': 10, 'acc': 'AEXT01000007_c1', 'description': 'Streptococcus agalactiae FSL S3-026 contig07, whole genom...',
+             'similarity': 26}),
+        ('2. BGC0000536_c1     Nisin_Q_biosynthetic_gene_cluster (100% of genes show similarity)',
+            {'rank': 2, 'acc': 'BGC0000536_c1', 'description': 'Nisin_Q_biosynthetic_gene_cluster', 'similarity': 100}),
+        ('6. AB362350_c1    Lactococcus lactis DNA, nisin Q gene cluster (nisQ, niqB,niqT,... (26% of genes show similarity)',
+            {'rank': 6, 'acc': 'AB362350_c1', 'description': 'Lactococcus lactis DNA, nisin Q gene cluster (nisQ, niqB,niqT,...',
+             'similarity': 26}),
+        ('1. AL939104_c2    Streptomyces coelicolor A3(2) complete genome; segment 1/29. (100% of genes show similarity)',
+            {'rank': 1, 'acc': 'AL939104_c2', 'description': 'Streptomyces coelicolor A3(2) complete genome; segment 1/29.',
+             'similarity': 100}),
+        ('6. AJ007731_c1    Streptomyces coelicolor scbR gene, scbA gene, ORFs A,B,X & Z. (16% of genes show similarity)',
+            {'rank': 6, 'acc': 'AJ007731_c1', 'description': 'Streptomyces coelicolor scbR gene, scbA gene, ORFs A,B,X & Z.',
+             'similarity': 16}),
+    ]
+
+    for line, expected in tests:
+        assert parse_clusterblast_line(line) == expected
