@@ -43,7 +43,7 @@ def load_record(rec, cur):
         'CDS': handle_cds,
         'CDS_motif': handle_cds_motif,
         'aSDomain': handle_asdomain,
-        'cluster': handle_cluster
+        'cluster': handle_cluster,
     }
 
     for feature in rec.features:
@@ -75,7 +75,7 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
 
 def get_or_create_genome(rec, cur):
     '''Fetch existing genome entry or create a new one'''
-    taxid = get_taxid(rec)
+    taxid = get_or_create_tax_id(cur, get_taxid(rec))
     cur.execute("SELECT genome_id FROM antismash.genomes WHERE taxon = %s", (taxid,))
     ret = cur.fetchone()
     if ret is None:
@@ -529,6 +529,21 @@ INSERT INTO antismash.rel_clusters_types (bgc_id, bgc_type_id)
 SELECT val.bgc_id, f.bgc_type_id FROM ( VALUES (%s, %s) ) val (bgc_id, bgc_type)
 LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term
 """, (params['bgc_id'], product))
+
+
+
+def get_or_create_tax_id(cur, taxid):
+    '''Get the tax_id or create a new one'''
+    cur.execute("SELECT tax_id FROM antismash.taxa WHERE tax_id = %s", (taxid, ))
+    ret = cur.fetchone()
+    if ret is None:
+        lineage = get_lineage(taxid)
+        lineage['tax_id'] = taxid
+        cur.execute("""
+INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order, family, genus, species) VALUES
+    (%(tax_id)s, %(superkingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s)""",
+                    lineage)
+    return taxid
 
 
 def get_lineage(taxid):
