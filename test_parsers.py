@@ -137,6 +137,15 @@ def test_parse_clusterblast_line():
         ('6. AJ007731_c1    Streptomyces coelicolor scbR gene, scbA gene, ORFs A,B,X & Z. (16% of genes show similarity)',
             {'rank': 6, 'acc': 'AJ007731_c1', 'description': 'Streptomyces coelicolor scbR gene, scbA gene, ORFs A,B,X & Z.',
              'similarity': 16}),
+        ('8. BAWF01000047_c1    Rhodococcus wratislaviensis NBRC 100605 DNA, contig: RW104... (25% of genes show similarity)',
+            {'rank': 8, 'acc': 'BAWF01000047_c1', 'description': 'Rhodococcus wratislaviensis NBRC 100605 DNA, contig: RW104...',
+             'similarity': 25}),
+        ('9. AJJH01000168_c1    Rhodococcus imtechensis RKJ300 = JCM 13270 strain RKJ300 C... (26% of genes show similarity)',
+            {'rank': 9, 'acc': 'AJJH01000168_c1', 'description': 'Rhodococcus imtechensis RKJ300 = JCM 13270 strain RKJ300 C...',
+             'similarity': 26}),
+        ("10. DQ149987_2_c2 concanamycin_4'-O-carbamoyl-2'-deoxyrhamnose (33% of genes show similarity)",
+            {'rank': 10, 'acc': 'DQ149987_2_c2', 'description': "concanamycin_4'-O-carbamoyl-2'-deoxyrhamnose",
+             'similarity': 33}),
     ]
 
     for line, expected in tests:

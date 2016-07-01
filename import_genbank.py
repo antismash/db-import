@@ -495,8 +495,10 @@ INSERT INTO antismash.clusterblast_hits (rank, acc, description, similarity, alg
 
 def parse_clusterblast_line(line):
     '''Parse a clusterblast result line'''
-    pattern = r'([\d]+)\. ([\w]+)\s+([\w,.;/& \(\)-]+)\(([\d]+)%'
+    pattern = r'''([\d]+)\. ([\w]+)\s+([\w,.:;='/& \(\)-]+)\(([\d]+)%'''
     m = re.search(pattern, line)
+    if m is None:
+        raise ValueError(line)
     res = {
         'rank': int(m.group(1)),
         'acc': m.group(2),
