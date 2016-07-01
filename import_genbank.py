@@ -24,10 +24,11 @@ def main():
 
     connection = psycopg2.connect(DB_CONNECTION)
 
-    rec = SeqIO.read(sys.argv[1], 'genbank')
+    recs = SeqIO.parse(sys.argv[1], 'genbank')
     with connection:
         with connection.cursor() as cursor:
-            load_record(rec, cursor)
+            for rec in recs:
+                load_record(rec, cursor)
 
     connection.close()
 
