@@ -25,6 +25,7 @@ def test_parse_smcog():
         ("smCOG: SMCOG1177:asparagine_synthase_(glutamine-hydrolyzing) (Score: 43.2; E-value: 1.392e-12);", ('SMCOG1177', '43.2', '1.392e-12')),
         ("smCOG: SMCOG1212:sodium:dicarboxylate_symporter (Score: 325.8; E-value: 5.8e-99);", ('SMCOG1212', '325.8', '5.8e-99')),
         ("smCOG: SMCOG1283:2`,3`-cyclic-nucleotide_2`-phosphodiesterase (Score: 162.6; E-value: 2.5e-49);", ('SMCOG1283', '162.6', '2.5e-49')),
+        ("smCOG: SMCOG1270:UDP-3-O-[3-hydroxymyristoyl]_N-acetylglucosamine (Score: 104.1; E-value: 1.4e-31);", ('SMCOG1270', '104.1', '1.4e-31')),
     ]
 
     for test_string, expected in test_cases:

@@ -13,7 +13,7 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
 DB_CONNECTION = "host='localhost' port=15432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
-SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
+SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 
 
 def main():
