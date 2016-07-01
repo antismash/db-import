@@ -147,6 +147,9 @@ def test_parse_clusterblast_line():
         ("10. DQ149987_2_c2 concanamycin_4'-O-carbamoyl-2'-deoxyrhamnose (33% of genes show similarity)",
             {'rank': 10, 'acc': 'DQ149987_2_c2', 'description': "concanamycin_4'-O-carbamoyl-2'-deoxyrhamnose",
              'similarity': 33}),
+        (" 8. CP009467_c2      Vibrio harveyi strain ATCC 33843 (392 [MAV]) chromosome 1, com... (21% of genes show similarity)",
+            {'rank': 8, 'acc': 'CP009467_c2', 'description': 'Vibrio harveyi strain ATCC 33843 (392 [MAV]) chromosome 1, com...',
+             'similarity': 21}),
     ]
 
     for line, expected in tests:
