@@ -432,6 +432,7 @@ RETURNING bgc_id
     params['bgc_id'] = ret[0]
 
     for product in feature.qualifiers['product'][0].split('-'):
+        product = product.lower()
         nx_create_rel_clusters_types(cur, params, product)
 
     store_clusterblast(cur, feature, 'clusterblast', params['bgc_id'])
