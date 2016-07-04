@@ -558,7 +558,7 @@ def get_lineage(taxid):
     '''Get the full lineage for a taxid from Entrez'''
     handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml")
     records = Entrez.read(handle)
-    lineage = {}
+    lineage = defaultdict(lambda: 'Unclassified')
     for entry in records[0]['LineageEx']:
         if entry['Rank'] == 'no rank':
             continue
