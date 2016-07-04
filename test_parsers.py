@@ -150,6 +150,9 @@ def test_parse_clusterblast_line():
         (" 8. CP009467_c2      Vibrio harveyi strain ATCC 33843 (392 [MAV]) chromosome 1, com... (21% of genes show similarity)",
             {'rank': 8, 'acc': 'CP009467_c2', 'description': 'Vibrio harveyi strain ATCC 33843 (392 [MAV]) chromosome 1, com...',
              'similarity': 21}),
+        ('1. CP002365_c2       Lactococcus lactis subsp. lactis #CV56, complete genome. (60% of genes show similarity)',
+            {'rank': 1, 'acc': 'CP002365_c2', 'description': 'Lactococcus lactis subsp. lactis #CV56, complete genome.',
+             'similarity': 60}),
     ]
 
     for line, expected in tests:
