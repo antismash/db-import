@@ -543,10 +543,14 @@ def get_or_create_tax_id(cur, taxid):
     if ret is None:
         lineage = get_lineage(taxid)
         lineage['tax_id'] = taxid
-        cur.execute("""
+        try:
+            cur.execute("""
 INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order, family, genus, species) VALUES
     (%(tax_id)s, %(superkingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s)""",
-                    lineage)
+                        lineage)
+        except KeyError:
+            print('Error inserting {!r}'.format(lineage))
+            raise
     return taxid
 
 
