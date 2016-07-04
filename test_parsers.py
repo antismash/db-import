@@ -153,6 +153,12 @@ def test_parse_clusterblast_line():
         ('1. CP002365_c2       Lactococcus lactis subsp. lactis #CV56, complete genome. (60% of genes show similarity)',
             {'rank': 1, 'acc': 'CP002365_c2', 'description': 'Lactococcus lactis subsp. lactis #CV56, complete genome.',
              'similarity': 60}),
+        ('10. CP001048_c2     Yersinia pseudotuberculosis PB1/+, complete genome. (91% of genes show similarity)',
+            {'rank': 10, 'acc': 'CP001048_c2', 'description': 'Yersinia pseudotuberculosis PB1/+, complete genome.',
+             'similarity': 91}),
+        ('4. CP004045_c10     Pseudomonas poae RE*1-1-14, complete genome. (91% of genes show similarity)',
+            {'rank': 4, 'acc': 'CP004045_c10', 'description': 'Pseudomonas poae RE*1-1-14, complete genome.',
+             'similarity': 91}),
     ]
 
     for line, expected in tests:
