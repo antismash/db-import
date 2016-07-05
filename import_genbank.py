@@ -76,7 +76,11 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
 
 def get_or_create_genome(rec, cur):
     '''Fetch existing genome entry or create a new one'''
-    taxid = get_or_create_tax_id(cur, get_taxid(rec))
+    try:
+        taxid = get_or_create_tax_id(cur, get_taxid(rec))
+    except psycopg2.ProgrammingError:
+        print(rec)
+        raise
     cur.execute("SELECT genome_id FROM antismash.genomes WHERE taxon = %s", (taxid,))
     ret = cur.fetchone()
     if ret is None:
