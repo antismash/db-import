@@ -137,24 +137,88 @@ def handle_cds(rec, cur, seq_id, feature):
         params['locus_tag'] = feature.qualifiers['locus_tag'][0]
         params['func_class'] = get_functional_class(cur, feature)
         params['evidence'] = 'prediction'
-        params['smcog_hit_id'] = None
         params['translation'] = get_translation(feature)
-        try:
-            smcog_name, smcog_score, smcog_evalue = parse_smcog(feature)
-            smcog_score = float(smcog_score)
-            smcog_evalue = float(smcog_evalue)
-            smcog_id = get_smcog_id(cur, smcog_name)
-            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_class) VALUES (%s, %s, %s) RETURNING smcog_hit_id", (smcog_score, smcog_evalue, smcog_id))
-            params['smcog_hit_id'] = cur.fetchone()[0]
-        except ValueError:
-            pass
-
         cur.execute("""
-INSERT INTO antismash.genes (functional_class, locus_tag, locus, smcog_hit, translation, evidence) VALUES
+INSERT INTO antismash.genes (functional_class, locus_tag, locus, translation, evidence) VALUES
 ( (SELECT functional_class_id FROM antismash.functional_classes WHERE name = %(func_class)s),
-  %(locus_tag)s, %(locus_id)s, %(smcog_hit_id)s, %(translation)s,
-  (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) )
+  %(locus_tag)s, %(locus_id)s, %(translation)s,
+  (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) ) RETURNING gene_id
 """, params)
+        ret = cur.fetchone()
+    gene_id = ret[0]
+    create_smcog_hit(cur, feature, gene_id)
+    create_profile_hits(cur, feature, gene_id)
+
+
+def create_smcog_hit(cur, feature, gene_id):
+    '''Create an smCOG hit entry'''
+    try:
+        smcog_name, smcog_score, smcog_evalue = parse_smcog(feature)
+        smcog_score = float(smcog_score)
+        smcog_evalue = float(smcog_evalue)
+        smcog_id = get_smcog_id(cur, smcog_name)
+        cur.execute("SELECT gene_id, smcog_id FROM antismash.smcog_hits WHERE smcog_id = %s AND gene_id = %s", (smcog_id, gene_id))
+        ret = cur.fetchone()
+        if ret is None:
+            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_id, gene_id) VALUES (%s, %s, %s, %s)", (smcog_score, smcog_evalue, smcog_id, gene_id))
+    except ValueError as e:
+        # no smcog qualifier is an expected error, don't log that
+        err_msg = str(e)
+        if not (err_msg.startswith('No smcog qualifier') or
+                err_msg.startswith('No note qualifier')):
+            print(e, file=sys.stderr)
+
+
+def create_profile_hits(cur, feature, gene_id):
+    '''Create profile hit entries for a feature'''
+    detected_domains = parse_domains_detected(feature)
+    for domain in detected_domains:
+        domain['gene_id'] = gene_id
+        cur.execute("""
+SELECT gene_id FROM antismash.profile_hits WHERE
+    gene_id = %(gene_id)s AND
+    name = %(name)s AND
+    evalue = %(evalue)s AND
+    bitscore = %(bitscore)s""", domain)
+        ret = cur.fetchone()
+        if ret is None:
+            try:
+                cur.execute("""
+INSERT INTO antismash.profile_hits (gene_id, name, evalue, bitscore, seeds)
+    VALUES (%(gene_id)s, %(name)s, %(evalue)s, %(bitscore)s, %(seeds)s)""", domain)
+            except psycopg2.IntegrityError:
+                print(feature)
+                print(domain)
+                raise
+
+
+def parse_domains_detected(feature):
+    '''Parse detected domains'''
+    pattern = re.compile(r'([\w-]+) \(E-value: ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?), bitscore: ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?), seeds: (\d+)')
+    domains = []
+    if 'sec_met' not in feature.qualifiers:
+        return domains
+
+    domain_line = None
+    for secmet_line in feature.qualifiers['sec_met']:
+        prefix = 'Domains detected: '
+        if secmet_line.startswith(prefix):
+            domain_line = secmet_line[len(prefix):]
+            break
+
+    if domain_line is None:
+        return domains
+
+    for domain in domain_line.split(';'):
+        match = pattern.search(domain)
+        dom = {}
+        dom['name'] = match.group(1)
+        dom['evalue'] = match.group(2)
+        dom['bitscore'] = match.group(4)
+        dom['seeds'] = match.group(6)
+        domains.append(dom)
+
+    return domains
 
 
 def get_translation(feature):

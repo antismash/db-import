@@ -5,6 +5,7 @@ from import_genbank import (
     parse_ripp_core,
     parse_monomers,
     parse_clusterblast_line,
+    parse_domains_detected,
 )
 
 
@@ -163,3 +164,19 @@ def test_parse_clusterblast_line():
 
     for line, expected in tests:
         assert parse_clusterblast_line(line) == expected
+
+
+def test_parse_domains_detected():
+    '''Test parsing the detected domains'''
+    tests = [
+        ('Domains detected: TIGR03731 (E-value: 1.3e-24, bitscore: 75.6, seeds: 23); mature_a (E-value: 6.5e-08, bitscore: 21.5, seeds: 5)',
+            [{'name': 'TIGR03731', 'evalue': '1.3e-24', 'bitscore': '75.6', 'seeds': '23'},
+             {'name': 'mature_a', 'evalue': '6.5e-08', 'bitscore': '21.5', 'seeds': '5'}]),
+        ('Domains detected: PP-binding (E-value: 1.4e-07, bitscore: 30.7, seeds: 164)',
+            [{'name': 'PP-binding', 'evalue': '1.4e-07', 'bitscore': '30.7', 'seeds': '164'}]),
+    ]
+
+    for test_string, expected in tests:
+        fake = FakeFeature()
+        fake.qualifiers['sec_met'] = [test_string]
+        assert parse_domains_detected(fake) == expected
