@@ -14,6 +14,8 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 DB_CONNECTION = "host='localhost' port=15432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
+# the black list contains accessions that contain duplicate locus tags
+BLACKLIST = ('AM260525', 'CP000049', 'LN829118', 'LN829119', 'LN832404', 'U00096')
 
 
 def main():
@@ -28,6 +30,9 @@ def main():
     with connection:
         with connection.cursor() as cursor:
             for rec in recs:
+                if rec.name in BLACKLIST:
+                    print('Skipping blacklisted record {!r}'.format(rec.name), file=sys.stderr)
+                    continue
                 load_record(rec, cursor)
 
     connection.close()
