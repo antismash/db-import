@@ -118,14 +118,14 @@ def get_or_create_locus(cur, seq_id, feature):
         params['strand'] = '-'
     else:
         params['strand'] = '0'
-    params['sequence'] = seq_id
-    cur.execute("SELECT locus_id FROM antismash.loci WHERE sequence = %(sequence)s AND start_pos = %(start_pos)s AND end_pos = %(end_pos)s AND strand = %(strand)s",
+    params['sequence_id'] = seq_id
+    cur.execute("SELECT locus_id FROM antismash.loci WHERE sequence_id = %(sequence_id)s AND start_pos = %(start_pos)s AND end_pos = %(end_pos)s AND strand = %(strand)s",
                 params)
     ret = cur.fetchone()
 
     if ret is None:
-        cur.execute("INSERT INTO antismash.loci (start_pos, end_pos, strand, sequence) VALUES "
-                    "(%(start_pos)s, %(end_pos)s, %(strand)s, %(sequence)s) RETURNING locus_id", params)
+        cur.execute("INSERT INTO antismash.loci (start_pos, end_pos, strand, sequence_id) VALUES "
+                    "(%(start_pos)s, %(end_pos)s, %(strand)s, %(sequence_id)s) RETURNING locus_id", params)
         ret = cur.fetchone()
 
     return ret[0]
@@ -366,7 +366,7 @@ def get_bgc_id_from_overlap(cur, seq_id, feature):
     end_pos = feature.location.nofuzzy_end
     cur.execute("""
 SELECT bgc.bgc_id FROM antismash.biosynthetic_gene_clusters bgc JOIN antismash.loci l ON bgc.locus = l.locus_id
-    WHERE l.sequence = %s AND int4range(l.start_pos, l.end_pos) @> int4range(%s, %s)""", (seq_id, start_pos, end_pos))
+    WHERE l.sequence_id = %s AND int4range(l.start_pos, l.end_pos) @> int4range(%s, %s)""", (seq_id, start_pos, end_pos))
     ret = cur.fetchone()
     if ret is None:
         raise ValueError('No bgc found overlapping {}'.format(feature))
