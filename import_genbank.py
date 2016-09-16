@@ -386,7 +386,7 @@ def handle_asdomain(rec, cur, seq_id, feature):
     params['kr_stereochemistry'] = None
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
 
-    cur.execute("SELECT as_domain_id FROM antismash.as_domains WHERE locus = %s", (params['locus_id'],))
+    cur.execute("SELECT as_domain_id FROM antismash.as_domains WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
         params['name'] = feature.qualifiers['domain'][0] if 'domain' in feature.qualifiers else None
@@ -414,8 +414,8 @@ INSERT INTO antismash.as_domains (
     consensus,
     kr_activity,
     kr_stereochemistry,
-    locus,
-    gene
+    locus_id,
+    gene_id
 ) VALUES (
     %(name)s,
     %(database)s,
