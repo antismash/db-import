@@ -250,7 +250,7 @@ def get_functional_class(cur, feature):
         smcog, _, _ = parse_smcog(feature)
         cur.execute("""
 SELECT name FROM antismash.functional_classes WHERE functional_class_id =
-    (SELECT functional_class FROM antismash.smcogs WHERE name = %s)""", (smcog,))
+    (SELECT functional_class_id FROM antismash.smcogs WHERE name = %s)""", (smcog,))
         ret = cur.fetchone()
         if ret is not None:
             func_class = ret[0]
