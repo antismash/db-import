@@ -82,7 +82,7 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
 def get_or_create_genome(rec, cur):
     '''Fetch existing genome entry or create a new one'''
     try:
-        taxid = get_or_create_tax_id(cur, get_taxid(rec))
+        taxid = get_or_create_tax_id(cur, get_taxid(rec), get_strain(rec))
     except psycopg2.ProgrammingError:
         print(rec)
         raise
@@ -105,6 +105,19 @@ def get_taxid(rec):
         for entry in feature.qualifiers['db_xref']:
             if entry.startswith('taxon:'):
                 return int(entry[6:])
+
+
+def get_strain(rec):
+    '''Extract the strain from a record'''
+    for feature in rec.features:
+        if feature.type != 'source':
+            continue
+        if 'strain' in feature.qualifiers:
+            return feature.qualifiers['strain'][0]
+        if 'serovar' in feature.qualifiers:
+            return feature.qualifiers['serovar'][0]
+
+    return None
 
 
 def get_or_create_locus(cur, seq_id, feature):
@@ -365,7 +378,7 @@ def get_bgc_id_from_overlap(cur, seq_id, feature):
     start_pos = feature.location.nofuzzy_start
     end_pos = feature.location.nofuzzy_end
     cur.execute("""
-SELECT bgc.bgc_id FROM antismash.biosynthetic_gene_clusters bgc JOIN antismash.loci l ON bgc.locus = l.locus_id
+SELECT bgc.bgc_id FROM antismash.biosynthetic_gene_clusters bgc JOIN antismash.loci l USING (locus_id)
     WHERE l.sequence_id = %s AND int4range(l.start_pos, l.end_pos) @> int4range(%s, %s)""", (seq_id, start_pos, end_pos))
     ret = cur.fetchone()
     if ret is None:
@@ -491,13 +504,13 @@ def handle_cluster(rec, cur, seq_id, feature):
         if note.startswith('Cluster number: '):
             params['cluster_number'] = note.split(':')[-1].strip()
 
-    cur.execute("SELECT bgc_id FROM antismash.biosynthetic_gene_clusters WHERE locus = %(locus_id)s", params)
+    cur.execute("SELECT bgc_id FROM antismash.biosynthetic_gene_clusters WHERE locus_id = %(locus_id)s", params)
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
-INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus, evidence)
-SELECT val.cluster_number::int4, val.locus, f.evidence_id FROM (
-    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s) ) val (cluster_number, locus, evidence)
+INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id)
+SELECT val.cluster_number::int4, val.locus_id, f.evidence_id FROM (
+    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s) ) val (cluster_number, locus_id, evidence)
 LEFT JOIN antismash.evidences f ON val.evidence = f.name
 RETURNING bgc_id
 """, params)
@@ -609,17 +622,18 @@ LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term
 
 
 
-def get_or_create_tax_id(cur, taxid):
+def get_or_create_tax_id(cur, taxid, strain):
     '''Get the tax_id or create a new one'''
     cur.execute("SELECT tax_id FROM antismash.taxa WHERE tax_id = %s", (taxid, ))
     ret = cur.fetchone()
     if ret is None:
         lineage = get_lineage(taxid)
         lineage['tax_id'] = taxid
+        lineage['strain'] = strain
         try:
             cur.execute("""
-INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order, family, genus, species) VALUES
-    (%(tax_id)s, %(superkingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s)""",
+INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order, family, genus, species, strain) VALUES
+    (%(tax_id)s, %(superkingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s, %(strain)s)""",
                         lineage)
         except KeyError:
             print('Error inserting {!r}'.format(lineage))
