@@ -71,9 +71,9 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
     cur.execute("SELECT sequence_id FROM antismash.dna_sequences WHERE md5 = %s", (params['md5sum'],))
     ret = cur.fetchone()
     if ret is None:
-        params['genome'] = genome_id
-        cur.execute("INSERT INTO antismash.dna_sequences (dna, md5, acc, version, genome)"
-                    "VALUES (%(seq)s, %(md5sum)s, %(accession)s, %(version)s, %(genome)s) RETURNING sequence_id;", params)
+        params['genome_id'] = genome_id
+        cur.execute("INSERT INTO antismash.dna_sequences (dna, md5, acc, version, genome_id)"
+                    "VALUES (%(seq)s, %(md5sum)s, %(accession)s, %(version)s, %(genome_id)s) RETURNING sequence_id;", params)
         ret = cur.fetchone()
 
     return ret[0]
