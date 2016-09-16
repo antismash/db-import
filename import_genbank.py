@@ -86,10 +86,10 @@ def get_or_create_genome(rec, cur):
     except psycopg2.ProgrammingError:
         print(rec)
         raise
-    cur.execute("SELECT genome_id FROM antismash.genomes WHERE taxon = %s", (taxid,))
+    cur.execute("SELECT genome_id FROM antismash.genomes WHERE tax_id = %s", (taxid,))
     ret = cur.fetchone()
     if ret is None:
-        cur.execute("INSERT INTO antismash.genomes (taxon) VALUES (%s) RETURNING genome_id;", (taxid,))
+        cur.execute("INSERT INTO antismash.genomes (tax_id) VALUES (%s) RETURNING genome_id;", (taxid,))
         ret = cur.fetchone()
 
     return ret[0]
