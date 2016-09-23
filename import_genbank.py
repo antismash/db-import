@@ -11,7 +11,7 @@ import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
-DB_CONNECTION = "host='localhost' port=15432 user='postgres' password='secret' dbname='antismash'"
+DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 # the black list contains accessions that contain duplicate locus tags
@@ -649,7 +649,7 @@ def get_lineage(taxid):
     for entry in records[0]['LineageEx']:
         if entry['Rank'] == 'no rank':
             continue
-        lineage[entry['Rank']] = entry['ScientificName']
+        lineage[entry['Rank']] = entry['ScientificName'].split(' ')[-1]
 
     return lineage
 
