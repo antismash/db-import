@@ -153,13 +153,16 @@ def handle_cds(rec, cur, seq_id, feature):
     ret = cur.fetchone()
     if ret is None:
         params['locus_tag'] = feature.qualifiers['locus_tag'][0]
+        params['name'] = feature.qualifiers.get('gene', [None])[0]
+        params['product'] = feature.qualifiers.get('product', [None])[0]
+        params['protein_id'] = feature.qualifiers.get('protein_id', [None])[0]
         params['func_class'] = get_functional_class(cur, feature)
         params['evidence'] = 'prediction'
         params['translation'] = get_translation(feature)
         cur.execute("""
-INSERT INTO antismash.genes (functional_class_id, locus_tag, locus_id, translation, evidence_id) VALUES
+INSERT INTO antismash.genes (functional_class_id, locus_tag, name, product, protein_id, locus_id, translation, evidence_id) VALUES
 ( (SELECT functional_class_id FROM antismash.functional_classes WHERE name = %(func_class)s),
-  %(locus_tag)s, %(locus_id)s, %(translation)s,
+  %(locus_tag)s, %(name)s, %(product)s, %(protein_id)s, %(locus_id)s, %(translation)s,
   (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) ) RETURNING gene_id
 """, params)
         ret = cur.fetchone()
