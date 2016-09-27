@@ -316,11 +316,12 @@ def handle_cds_motif(rec, cur, seq_id, feature):
 
     params = defaultdict(lambda: None)
     params['bgc_id'] = get_bgc_id_from_overlap(cur, seq_id, feature)
+    params['locus_tag'] = feature.qualifiers['locus_tag'][0]
     parse_ripp_core(feature, params)
     if params['peptide_sequence'] is None:
         return
 
-    cur.execute("SELECT compound_id FROM antismash.compounds WHERE peptide_sequence = %(peptide_sequence)s", params)
+    cur.execute("SELECT compound_id FROM antismash.compounds WHERE peptide_sequence = %(peptide_sequence)s AND locus_tag = %(locus_tag)s", params)
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
@@ -331,7 +332,8 @@ INSERT INTO antismash.compounds (
     alternative_weights,
     bridges,
     class,
-    score
+    score,
+    locus_tag
 ) VALUES (
     %(peptide_sequence)s,
     %(molecular_weight)s,
@@ -339,7 +341,8 @@ INSERT INTO antismash.compounds (
     %(alternative_weights)s,
     %(bridges)s,
     %(class)s,
-    %(score)s
+    %(score)s,
+    %(locus_tag)s
 ) RETURNING compound_id""", params)
         ret = cur.fetchone()
 
