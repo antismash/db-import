@@ -405,20 +405,17 @@ def handle_asdomain(rec, cur, seq_id, feature):
     cur.execute("SELECT as_domain_id FROM antismash.as_domains WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
-        params['name'] = feature.qualifiers['domain'][0] if 'domain' in feature.qualifiers else None
-        params['database'] = feature.qualifiers['database'][0] if 'database' in feature.qualifiers else None
         params['score'] = float(feature.qualifiers['score'][0]) if 'score' in feature.qualifiers else None
         params['evalue'] = float(feature.qualifiers['evalue'][0]) if 'evalue' in feature.qualifiers else None
         params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
         params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
         params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
+        params['as_domain_profile_id'] = get_as_domain_profile_id(cur, feature.qualifiers.get('domain', [None])[0])
 
         parse_specificity(feature, params)
 
         cur.execute("""
 INSERT INTO antismash.as_domains (
-    name,
-    database,
     detection,
     score,
     evalue,
@@ -430,11 +427,10 @@ INSERT INTO antismash.as_domains (
     consensus,
     kr_activity,
     kr_stereochemistry,
+    as_domain_profile_id,
     locus_id,
     gene_id
 ) VALUES (
-    %(name)s,
-    %(database)s,
     %(detection)s,
     %(score)s,
     %(evalue)s,
@@ -446,6 +442,7 @@ INSERT INTO antismash.as_domains (
     %(consensus)s,
     %(kr_activity)s,
     %(kr_stereochemistry)s,
+    %(as_domain_profile_id)s,
     %(locus_id)s,
     (SELECT gene_id FROM antismash.genes WHERE locus_tag = %(locus_tag)s)
 ) RETURNING as_domain_id""", params)
@@ -456,6 +453,19 @@ INSERT INTO antismash.as_domains (
             ret = cur.fetchone()
             if ret is None:
                 cur.execute("INSERT INTO antismash.rel_as_domains_monomers (as_domain_id, monomer_id) VALUES (%s, %s)", (as_domain_id, monomer_id))
+
+
+def get_as_domain_profile_id(cur, name):
+    '''Get the as_domain_profile_id for a domain by name'''
+    if name is None:
+        return None
+
+    cur.execute("SELECT as_domain_profile_id FROM antismash.as_domain_profiles WHERE name = %s", (name, ))
+    ret = cur.fetchone()
+    if ret is None:
+        raise ValueError('Invalid asDomain name {!r}'.format(name))
+
+    return ret[0]
 
 
 def get_or_create_monomer(cur, name):
