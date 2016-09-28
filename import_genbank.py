@@ -605,7 +605,7 @@ def parse_clusterblast_line(line):
     res = {
         'rank': int(m.group(1)),
         'acc': m.group(2),
-        'description': m.group(3).strip(),
+        'description': m.group(3).replace('_', ' ').strip(),
         'similarity': int(m.group(4))
     }
     return res
