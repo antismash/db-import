@@ -93,10 +93,11 @@ def get_or_create_genome(rec, cur):
     except psycopg2.ProgrammingError:
         print(rec)
         raise
-    cur.execute("SELECT genome_id FROM antismash.genomes WHERE tax_id = %s", (taxid,))
+    assembly_id = get_assembly_id(rec)
+    cur.execute("SELECT genome_id FROM antismash.genomes WHERE tax_id = %s AND assembly_id = %s", (taxid, assembly_id))
     ret = cur.fetchone()
     if ret is None:
-        cur.execute("INSERT INTO antismash.genomes (tax_id) VALUES (%s) RETURNING genome_id;", (taxid,))
+        cur.execute("INSERT INTO antismash.genomes (tax_id, assembly_id) VALUES (%s, %s) RETURNING genome_id;", (taxid, assembly_id))
         ret = cur.fetchone()
 
     return ret[0]
@@ -126,6 +127,15 @@ def get_strain(rec):
 
     return None
 
+
+def get_assembly_id(rec):
+    """Extract the NCBI assembly ID from a record."""
+    for ref in rec.dbxrefs:
+        if not ref.startswith('Assembly:'):
+            continue
+        return ref[9:]
+
+    return None
 
 def get_or_create_locus(cur, seq_id, feature):
     """Get or create a new locus tag."""
