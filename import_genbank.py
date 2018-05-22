@@ -53,6 +53,7 @@ def load_record(rec, cur):
         'CDS_motif': handle_cds_motif,
         'aSDomain': handle_asdomain,
         'cluster': handle_cluster,
+        'gene': handle_gene,
     }
 
     for feature in rec.features:
@@ -151,12 +152,24 @@ def get_or_create_locus(cur, seq_id, feature):
     return ret[0]
 
 
+def handle_gene(rec, cur, seq_id, feature):
+    """Handle gene features."""
+    params = {}
+    params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
+
+    cur.execute("SELECT gene_id FROM antismash.genes WHERE locus_id = %s", (params['locus_id'],))
+    ret = cur.fetchone()
+    if ret is None:
+        params['locus_tag'] = feature.qualifiers['locus_tag'][0]
+        cur.execute("INSERT INTO antismash.genes (locus_tag) VALUES (%(locus_tag)s)", params)
+
+
 def handle_cds(rec, cur, seq_id, feature):
     """Handle CDS features."""
     params = {}
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
 
-    cur.execute("SELECT gene_id FROM antismash.genes WHERE locus_id = %s", (params['locus_id'],))
+    cur.execute("SELECT cds_id FROM antismash.cdss WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
         params['locus_tag'] = feature.qualifiers['locus_tag'][0]
@@ -167,7 +180,7 @@ def handle_cds(rec, cur, seq_id, feature):
         params['evidence'] = 'prediction'
         params['translation'] = get_translation(feature)
         cur.execute("""
-INSERT INTO antismash.genes (
+INSERT INTO antismash.cdss (
     functional_class_id,
     locus_tag,
     name,
@@ -179,27 +192,27 @@ INSERT INTO antismash.genes (
 ) VALUES
 ( (SELECT functional_class_id FROM antismash.functional_classes WHERE name = %(func_class)s),
   %(locus_tag)s, %(name)s, %(product)s, %(protein_id)s, %(locus_id)s, %(translation)s,
-  (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) ) RETURNING gene_id
+  (SELECT evidence_id FROM antismash.evidences WHERE name = %(evidence)s) ) RETURNING cds_id
 """, params)
         ret = cur.fetchone()
-    gene_id = ret[0]
-    create_smcog_hit(cur, feature, gene_id)
-    create_profile_hits(cur, feature, gene_id)
+    cds_id = ret[0]
+    create_smcog_hit(cur, feature, cds_id)
+    create_profile_hits(cur, feature, cds_id)
 
 
-def create_smcog_hit(cur, feature, gene_id):
+def create_smcog_hit(cur, feature, cds_id):
     """Create an smCOG hit entry."""
     try:
         smcog_name, smcog_score, smcog_evalue = parse_smcog(feature)
         smcog_score = float(smcog_score)
         smcog_evalue = float(smcog_evalue)
         smcog_id = get_smcog_id(cur, smcog_name)
-        cur.execute("SELECT gene_id, smcog_id FROM antismash.smcog_hits WHERE "
-                    "smcog_id = %s AND gene_id = %s", (smcog_id, gene_id))
+        cur.execute("SELECT cds_id, smcog_id FROM antismash.smcog_hits WHERE "
+                    "smcog_id = %s AND cds_id = %s", (smcog_id, cds_id))
         ret = cur.fetchone()
         if ret is None:
-            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_id, gene_id)"
-                        "VALUES (%s, %s, %s, %s)", (smcog_score, smcog_evalue, smcog_id, gene_id))
+            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_id, cds_id)"
+                        "VALUES (%s, %s, %s, %s)", (smcog_score, smcog_evalue, smcog_id, cds_id))
     except ValueError as e:
         # no smcog qualifier is an expected error, don't log that
         err_msg = str(e)
@@ -208,14 +221,14 @@ def create_smcog_hit(cur, feature, gene_id):
             print(e, file=sys.stderr)
 
 
-def create_profile_hits(cur, feature, gene_id):
+def create_profile_hits(cur, feature, cds_id):
     """Create profile hit entries for a feature."""
     detected_domains = parse_domains_detected(feature)
     for domain in detected_domains:
-        domain['gene_id'] = gene_id
+        domain['cds_id'] = cds_id
         cur.execute("""
-SELECT gene_id FROM antismash.profile_hits WHERE
-    gene_id = %(gene_id)s AND
+SELECT cds_id FROM antismash.profile_hits WHERE
+    cds_id = %(cds_id)s AND
     name = %(name)s AND
     evalue = %(evalue)s AND
     bitscore = %(bitscore)s""", domain)
@@ -223,8 +236,8 @@ SELECT gene_id FROM antismash.profile_hits WHERE
         if ret is None:
             try:
                 cur.execute("""
-INSERT INTO antismash.profile_hits (gene_id, name, evalue, bitscore, seeds)
-    VALUES (%(gene_id)s, %(name)s, %(evalue)s, %(bitscore)s, %(seeds)s)""", domain)
+INSERT INTO antismash.profile_hits (cds_id, name, evalue, bitscore, seeds)
+    VALUES (%(cds_id)s, %(name)s, %(evalue)s, %(bitscore)s, %(seeds)s)""", domain)
             except psycopg2.IntegrityError:
                 print(feature)
                 print(domain)
@@ -456,7 +469,7 @@ INSERT INTO antismash.as_domains (
     kr_stereochemistry,
     as_domain_profile_id,
     locus_id,
-    gene_id
+    cds_id
 ) VALUES (
     %(detection)s,
     %(score)s,
@@ -471,7 +484,7 @@ INSERT INTO antismash.as_domains (
     %(kr_stereochemistry)s,
     %(as_domain_profile_id)s,
     %(locus_id)s,
-    (SELECT gene_id FROM antismash.genes WHERE locus_tag = %(locus_tag)s)
+    (SELECT cds_id FROM antismash.cdss WHERE locus_tag = %(locus_tag)s)
 ) RETURNING as_domain_id""", params)
         as_domain_id = cur.fetchone()[0]
         if params['consensus'] is not None:
