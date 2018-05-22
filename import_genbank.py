@@ -274,6 +274,10 @@ def parse_domains_detected(feature):
 
     for domain in domain_line.split(';'):
         match = pattern.search(domain)
+        if not match:
+            print("no match found for", domain, file=sys.stderr)
+            print("line:", domain_line, file=sys.stderr)
+            continue
         dom = {}
         dom['name'] = match.group(1)
         dom['evalue'] = match.group(2)
