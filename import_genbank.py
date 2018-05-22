@@ -447,6 +447,10 @@ def handle_asdomain(rec, cur, seq_id, feature):
     params['minowa'] = None
     params['nrps_predictor'] = None
     params['stachelhaus'] = None
+    params['phmm'] = None
+    params['predicat'] = None
+    params['pid'] = None
+    params['snn_score'] = None
     params['consensus'] = None
     params['kr_activity'] = None
     params['kr_stereochemistry'] = None
@@ -474,6 +478,10 @@ INSERT INTO antismash.as_domains (
     minowa,
     nrps_predictor,
     stachelhaus,
+    phmm,
+    predicat,
+    pid,
+    snn_score,
     consensus,
     kr_activity,
     kr_stereochemistry,
@@ -489,6 +497,10 @@ INSERT INTO antismash.as_domains (
     %(minowa)s,
     %(nrps_predictor)s,
     %(stachelhaus)s,
+    %(phmm)s,
+    %(predicat)s,
+    %(pid)s,
+    %(snn_score)s,
     %(consensus)s,
     %(kr_activity)s,
     %(kr_stereochemistry)s,
@@ -497,8 +509,11 @@ INSERT INTO antismash.as_domains (
     (SELECT cds_id FROM antismash.cdss WHERE locus_tag = %(locus_tag)s)
 ) RETURNING as_domain_id""", params)
         as_domain_id = cur.fetchone()[0]
-        if params['consensus'] is not None:
-            monomer_id = get_or_create_monomer(cur, params['consensus'])
+        if params['consensus'] is None:
+            return
+
+        for monomer in params['consensus'].split('|'):
+            monomer_id = get_or_create_monomer(cur, monomer)
             cur.execute("SELECT as_domain_id FROM antismash.rel_as_domains_monomers WHERE "
                         "as_domain_id = %s AND monomer_id = %s", (as_domain_id, monomer_id))
             ret = cur.fetchone()
@@ -541,7 +556,7 @@ def parse_specificity(feature, params):
             if spec.startswith('KR stereochemistry: '):
                 params['kr_stereochemistry'] = spec.split(':')[-1].strip()
                 continue
-            if spec.startswith('NRPSpredictor2 SVM: '):
+            if spec.startswith('NRPSpredictor3 SVM: '):
                 params['nrps_predictor'] = spec.split(':')[-1].strip()
                 continue
             if spec.startswith('Stachelhaus code: '):
@@ -550,12 +565,28 @@ def parse_specificity(feature, params):
             if spec.startswith('Minowa: '):
                 params['minowa'] = spec.split(':')[-1].strip()
                 continue
+            if spec.startswith('pHMM: '):
+                params['phmm'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('PrediCAT '):
+                params['predicat'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('PID to NN: '):
+                params['pid'] = spec.split(':')[-1].strip()
+                continue
+            if spec.startswith('SNN score: '):
+                params['snn_score'] = spec.split(':')[-1].strip()
+                continue
             if spec.startswith('PKS signature: '):
                 params['pks_signature'] = spec.split(':')[-1].strip()
                 continue
             if spec.startswith('consensus: '):
                 params['consensus'] = spec.split(':')[-1].strip()
                 continue
+            if spec.startswith('SANDPUMA ensemble: '):
+                params['consensus'] = spec.split(':')[-1].strip()
+                continue
+
 
 
 def handle_cluster(rec, cur, seq_id, feature):
@@ -610,15 +641,16 @@ RETURNING bgc_id
         cur.execute("INSERT INTO antismash.rel_clusters_compounds (bgc_id, compound_id) VALUES (%s, %s)",
                     (params['bgc_id'], compound_id))
 
-    for i, monomer in enumerate(monomer_list):
-        monomer_id = get_or_create_monomer(cur, monomer)
+    for i, monomers in enumerate(monomer_list):
         position = i + 1
-        cur.execute("SELECT position FROM antismash.rel_compounds_monomers WHERE "
-                    "compound_id = %s AND monomer_id = %s AND position = %s",
-                    (compound_id, monomer_id, position))
-        ret = cur.fetchone()
-        if ret is None:
-            cur.execute("""
+        for monomer in monomers:
+            monomer_id = get_or_create_monomer(cur, monomer)
+            cur.execute("SELECT position FROM antismash.rel_compounds_monomers WHERE "
+                        "compound_id = %s AND monomer_id = %s AND position = %s",
+                        (compound_id, monomer_id, position))
+            ret = cur.fetchone()
+            if ret is None:
+                cur.execute("""
 INSERT INTO antismash.rel_compounds_monomers (compound_id, monomer_id, position)
     VALUES (%s, %s, %s)""", (compound_id, monomer_id, position))
 
@@ -669,9 +701,11 @@ def parse_monomers(feature):
     for note in feature.qualifiers['note']:
         if note.startswith('Monomers prediction: '):
             monomers_str = note.split(':')[-1].strip()
+            if monomers_str == '':
+                return [], None
             monomers_condensed = monomers_str.replace('(', '').replace(')', '').replace(' ', '').replace('+', '-')
             monomers = monomers_condensed.split('-')
-            return monomers, monomers_str
+            return [monomer.split('|') for monomer in monomers], monomers_str
     return [], None
 
 
