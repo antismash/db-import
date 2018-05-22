@@ -18,6 +18,7 @@ Entrez.email = "kblin@biosustain.dtu.dk"
 SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 # the black list contains accessions that contain duplicate locus tags
 BLACKLIST = []  # type: t.Sequence[str]
+REPORTED_TYPES = set()
 
 
 def main():
@@ -56,6 +57,9 @@ def load_record(rec, cur):
 
     for feature in rec.features:
         if feature.type not in FEATURE_HANDLERS:
+            if feature.type not in REPORTED_TYPES:
+                print("Skipping unknown feature type", feature.type, file=sys.stderr)
+                REPORTED_TYPES.add(feature.type)
             continue
         handler = FEATURE_HANDLERS[feature.type]
         handler(rec, cur, seq_id, feature)
