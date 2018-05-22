@@ -3,7 +3,9 @@
 from __future__ import print_function
 from collections import defaultdict
 import hashlib
+import os
 import sys
+import typing as t
 import re
 from Bio import Entrez, SeqIO
 import psycopg2
@@ -15,7 +17,7 @@ DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' db
 Entrez.email = "kblin@biosustain.dtu.dk"
 SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 # the black list contains accessions that contain duplicate locus tags
-BLACKLIST = ('AM260525', 'CP000049', 'LN829118', 'LN829119', 'LN832404', 'U00096')
+BLACKLIST = []  # type: t.Sequence[str]
 
 
 def main():
@@ -63,7 +65,7 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
     """Fetch existing dna_sequence entry or create a new one."""
     params = {}
     params['seq'] = str(rec.seq)
-    params['md5sum'] = hashlib.md5(params['seq']).hexdigest()
+    params['md5sum'] = hashlib.md5(params['seq'].encode('utf-8')).hexdigest()
     params['accession'] = rec.annotations['accessions'][0]
     params['version'] = rec.annotations['sequence_version']
 
