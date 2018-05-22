@@ -745,7 +745,11 @@ INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order
 
 def get_lineage(taxid):
     """Get the full lineage for a taxid from Entrez."""
-    handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml")
+    api_key = os.environ.get('ASDBI_ENTREZ_API_KEY', '')
+    extra_params = {}
+    if api_key:
+        extra_params['api_key'] = api_key
+    handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml", **extra_params)
     records = Entrez.read(handle)
     lineage = defaultdict(lambda: 'Unclassified')
     for entry in records[0]['LineageEx']:
