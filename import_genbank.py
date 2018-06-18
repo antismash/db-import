@@ -55,6 +55,7 @@ def load_record(rec, cur):
         'cluster': handle_cluster,
         'gene': handle_gene,
         'misc_feature': handle_misc_feature,
+        'PFAM_domain': handle_pfamdomain,
     }
 
     for feature in rec.features:
@@ -550,6 +551,62 @@ INSERT INTO antismash.as_domains (
             if ret is None:
                 cur.execute("INSERT INTO antismash.rel_as_domains_monomers (as_domain_id, monomer_id) VALUES "
                             "(%s, %s)", (as_domain_id, monomer_id))
+
+
+def handle_pfamdomain(rec, cur, seq_id, feature):
+    """Handle PFAM_domain features."""
+    params = {}
+
+    params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
+
+    cur.execute("SELECT pfam_domain_id FROM antismash.pfam_domains WHERE locus_id = %s", (params['locus_id'],))
+    ret = cur.fetchone()
+    if ret is None:
+        params['score'] = float(feature.qualifiers['score'][0]) if 'score' in feature.qualifiers else None
+        params['evalue'] = float(feature.qualifiers['evalue'][0]) if 'evalue' in feature.qualifiers else None
+        params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
+        params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
+        params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
+        params['database'] = feature.qualifiers['database'][0] if 'database' in feature.qualifiers else None
+        params['pfam_id'] = get_pfam_id(cur, feature.qualifiers.get('db_xref', [None])[0])
+
+        cur.execute("""
+INSERT INTO antismash.pfam_domains (
+    database,
+    detection,
+    score,
+    evalue,
+    translation,
+    pfam_id,
+    locus_id,
+    cds_id
+) VALUES (
+    %(database)s,
+    %(detection)s,
+    %(score)s,
+    %(evalue)s,
+    %(translation)s,
+    %(pfam_id)s,
+    %(locus_id)s,
+    (SELECT cds_id FROM antismash.cdss WHERE locus_tag = %(locus_tag)s)
+)""", params)
+
+
+def get_pfam_id(cur, xref):
+    """Get the pfam_id for a domain by db_xref string."""
+    if xref is None:
+        return None
+
+    if not xref.startswith("PFAM: "):
+        raise ValueError("Invalid db_xref trying to parse pfam_id: {!r}".format(xref))
+
+    pfam = xref.split()[-1].strip()
+    cur.execute("SELECT pfam_id FROM antismash.pfams WHERE pfam_id = %s", (pfam,))
+    ret = cur.fetchone()
+    if ret is None:
+        raise ValueError("Invalid pfam_id {!r}".format(pfam))
+
+    return ret[0]
 
 
 def get_as_domain_profile_id(cur, name):
