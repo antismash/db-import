@@ -130,7 +130,7 @@ def test_parse_clusterblast_line():
             {'rank': 10, 'acc': 'AEXT01000007_c1', 'description': 'Streptococcus agalactiae FSL S3-026 contig07, whole genom...',
              'similarity': 26}),
         ('2. BGC0000536_c1     Nisin_Q_biosynthetic_gene_cluster (100% of genes show similarity)',
-            {'rank': 2, 'acc': 'BGC0000536_c1', 'description': 'Nisin Q biosynthetic gene cluster', 'similarity': 100}),
+            {'rank': 2, 'acc': 'BGC0000536_c1', 'description': 'Nisin Q', 'similarity': 100}),
         ('6. AB362350_c1    Lactococcus lactis DNA, nisin Q gene cluster (nisQ, niqB,niqT,... (26% of genes show similarity)',
             {'rank': 6, 'acc': 'AB362350_c1', 'description': 'Lactococcus lactis DNA, nisin Q gene cluster (nisQ, niqB,niqT,...',
              'similarity': 26}),
@@ -161,6 +161,9 @@ def test_parse_clusterblast_line():
         ('4. CP004045_c10     Pseudomonas poae RE*1-1-14, complete genome. (91% of genes show similarity)',
             {'rank': 4, 'acc': 'CP004045_c10', 'description': 'Pseudomonas poae RE*1-1-14, complete genome.',
              'similarity': 91}),
+        ('1. BGC0000315_c1	Calcium-dependent_antibiotic_biosynthetic_gen e_cluster (90% of genes show similarity)',
+            {'rank': 1, 'acc': 'BGC0000315_c1', 'description': 'Calcium-dependent antibiotic',
+             'similarity': 90}),
     ]
 
     for line, expected in tests:

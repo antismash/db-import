@@ -691,11 +691,24 @@ def parse_clusterblast_line(line):
     m = re.search(pattern, line)
     if m is None:
         raise ValueError(line)
+
+    rank = int(m.group(1))
+    acc = m.group(2)
+    desc = m.group(3)
+    similarity = int(m.group(4))
+
+    # Ugh, this is ugly, but only the MIBiG results have underscores that cause random
+    # mid-word line breaks that Biopython converts into spaces.
+    if acc.startswith('BGC'):
+        desc = desc.replace(' ', '')
+    desc = desc.replace('_', ' ').strip()
+    if desc.endswith('biosynthetic gene cluster'):
+        desc = desc[:-len('biosynthetic gene cluster')].strip()
     res = {
-        'rank': int(m.group(1)),
-        'acc': m.group(2),
-        'description': m.group(3).replace('_', ' ').strip(),
-        'similarity': int(m.group(4))
+        'rank': rank,
+        'acc': acc,
+        'description': desc,
+        'similarity': similarity
     }
     return res
 
