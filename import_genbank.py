@@ -54,6 +54,7 @@ def load_record(rec, cur):
         'aSDomain': handle_asdomain,
         'cluster': handle_cluster,
         'gene': handle_gene,
+        'misc_feature': handle_misc_feature,
     }
 
     for feature in rec.features:
@@ -208,6 +209,31 @@ INSERT INTO antismash.cdss (
     cds_id = ret[0]
     create_smcog_hit(cur, feature, cds_id)
     create_profile_hits(cur, feature, cds_id)
+
+
+def handle_misc_feature(rec, cur, seq_id, feature):
+    """Handle (a subset of) misc_feature features."""
+
+    # only want to handle misc_features created by antiSMASH
+    if 'tool' not in feature.qualifiers or 'antiSMASH'not in feature.qualifiers['tool']:
+        return
+
+    is_tta_codon = False
+    for entry in feature.qualifiers['note']:
+        if entry.startswith("tta leucine codon"):
+            is_tta_codon = True
+            break
+
+    if not is_tta_codon:
+        return
+
+    params = {}
+    params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
+
+    cur.execute("SELECT tta_codon_id FROM antismash.tta_codons WHERE locus_id = %s", (params['locus_id'],))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.tta_codons (locus_id) VALUES ( %(locus_id)s )", params)
 
 
 def create_smcog_hit(cur, feature, cds_id):
