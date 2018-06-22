@@ -705,8 +705,12 @@ RETURNING bgc_id
     params['bgc_id'] = ret[0]
 
     for product in feature.qualifiers['product'][0].split('-'):
-        product = product.lower()
-        nx_create_rel_clusters_types(cur, params, product)
+        product = product.lower().replace(' ', '')
+        try:
+            nx_create_rel_clusters_types(cur, params, product)
+        except psycopg2.IntegrityError:
+            print("Failed to insert product type", product)
+            raise
 
     store_clusterblast(cur, feature, 'clusterblast', params['bgc_id'])
     store_clusterblast(cur, feature, 'knownclusterblast', params['bgc_id'])
