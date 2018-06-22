@@ -75,7 +75,7 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
     params['seq'] = str(rec.seq)
     params['md5sum'] = hashlib.md5(params['seq'].encode('utf-8')).hexdigest()
     params['accession'] = rec.annotations['accessions'][0]
-    params['version'] = rec.annotations['sequence_version']
+    params['version'] = rec.annotations.get('sequence_version', '0')
 
     cur.execute("SELECT sequence_id FROM antismash.dna_sequences WHERE md5 = %s", (params['md5sum'],))
     ret = cur.fetchone()
