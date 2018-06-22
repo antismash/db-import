@@ -8,6 +8,7 @@ import sys
 import typing as t
 import re
 from Bio import Entrez, SeqIO
+import urllib
 import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
@@ -173,7 +174,7 @@ def handle_gene(rec, cur, seq_id, feature):
     ret = cur.fetchone()
     if ret is None:
         params['locus_tag'] = feature.qualifiers['locus_tag'][0]
-        cur.execute("INSERT INTO antismash.genes (locus_tag) VALUES (%(locus_tag)s)", params)
+        cur.execute("INSERT INTO antismash.genes (locus_tag, locus_id) VALUES (%(locus_tag)s, %(locus_id)s)", params)
 
 
 def handle_cds(rec, cur, seq_id, feature):
@@ -849,7 +850,15 @@ def get_lineage(taxid):
     extra_params = {}
     if api_key:
         extra_params['api_key'] = api_key
-    handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml", **extra_params)
+    retries = 5
+    while retries > 0:
+        try:
+            handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml", **extra_params)
+            break
+        except urllib.error.HTTPError as err:
+            retries -= 1
+            print("Got http error:", err, retries, "left")
+
     records = Entrez.read(handle)
     lineage = defaultdict(lambda: 'Unclassified')
     for entry in records[0]['LineageEx']:
