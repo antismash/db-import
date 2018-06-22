@@ -873,6 +873,8 @@ def get_lineage(taxid):
             continue
         lineage[entry['Rank']] = entry['ScientificName'].split(' ')[-1]
 
+    if 'species' not in lineage and 'ScientificName' in records[0] and len(records[0]['ScientificName'].split()) == 2:
+        lineage['species'] = records[0]['ScientificName'].split()[-1]
     return lineage
 
 
