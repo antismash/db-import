@@ -389,7 +389,10 @@ def handle_cds_motif(rec, cur, seq_id, feature):
         return
 
     params = defaultdict(lambda: None)
-    params['bgc_id'] = get_bgc_id_from_overlap(cur, seq_id, feature)
+    try:
+        params['bgc_id'] = get_bgc_id_from_overlap(cur, seq_id, feature)
+    except ValueError:
+        return
     params['locus_tag'] = feature.qualifiers['locus_tag'][0]
     parse_ripp_core(feature, params)
     if params['peptide_sequence'] is None:
