@@ -557,7 +557,8 @@ def handle_asdomain(rec, cur, seq_id, feature):
 
         parse_specificity(feature, params)
 
-        cur.execute("""
+        try:
+            cur.execute("""
 INSERT INTO antismash.as_domains (
     detection,
     score,
@@ -597,6 +598,9 @@ INSERT INTO antismash.as_domains (
     %(locus_id)s,
     (SELECT cds_id FROM antismash.cdss WHERE locus_tag = %(locus_tag)s)
 ) RETURNING as_domain_id""", params)
+        except psycopg2.ProgrammingError:
+            print("error fetching cds_id for locus_tag", params['locus_tag'])
+            raise
         as_domain_id = cur.fetchone()[0]
         if params['consensus'] is None:
             return
