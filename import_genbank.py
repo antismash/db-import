@@ -211,6 +211,7 @@ INSERT INTO antismash.cdss (
     cds_id = ret[0]
     create_smcog_hit(cur, feature, cds_id)
     create_profile_hits(cur, feature, cds_id)
+    create_terpene_cyclisations(cur, feature, cds_id)
 
 
 def handle_misc_feature(rec, cur, seq_id, feature):
@@ -280,6 +281,59 @@ INSERT INTO antismash.profile_hits (cds_id, name, evalue, bitscore, seeds)
                 print(feature)
                 print(domain)
                 raise
+
+
+def create_terpene_cyclisations(cur, feature, cds_id):
+    """Create terpene cyclisations entry"""
+    detected = parse_terpene_cyclisation(feature)
+    if not detected:
+        return
+
+    detected['cds_id'] = cds_id
+    cur.execute("""
+SELECT cds_id FROM antismash.terpene_cyclisations LEFT JOIN antismash.terpenes USING (terpene_id) WHERE
+    cds_id = %(cds_id)s AND
+    from_carbon = %(from_carbon)s AND
+    to_carbon = %(to_carbon)s AND
+    name = %(synthase_type)s""", detected)
+    ret = cur.fetchone()
+
+    if ret is None:
+        cur.execute("""
+INSERT INTO antismash.terpene_cyclisations (terpene_id, cds_id, from_carbon, to_carbon) VALUES (
+    (SELECT terpene_id FROM antismash.terpenes WHERE name = %(synthase_type)s),
+    %(cds_id)s,
+    %(from_carbon)s,
+    %(to_carbon)s
+)""", detected)
+
+
+def parse_terpene_cyclisation(feature):
+    """Parse terpene cyclisation patterns."""
+    detected = {}
+
+    if not 'note' in feature.qualifiers:
+        return detected
+
+    for note in feature.qualifiers['note']:
+        if not note.startswith('Cyclization pattern: '):
+            continue
+        if note.endswith('no prediction'):
+            return detected
+
+        parts = note[21:].split('-')
+        if len(parts) != 3:
+            return detected
+
+        try:
+            detected['from_carbon'] = int(parts[0])
+            detected['to_carbon'] = int(parts[1])
+            detected['synthase_type'] = parts[2]
+        except ValueError:
+            return {}
+        break
+
+    return detected
 
 
 def parse_domains_detected(feature):

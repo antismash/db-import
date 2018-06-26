@@ -6,6 +6,7 @@ from import_genbank import (
     parse_monomers,
     parse_clusterblast_line,
     parse_domains_detected,
+    parse_terpene_cyclisation,
 )
 
 
@@ -184,3 +185,19 @@ def test_parse_domains_detected():
         fake = FakeFeature()
         fake.qualifiers['sec_met'] = [test_string]
         assert parse_domains_detected(fake) == expected
+
+
+def test_parse_terpene_cyclisations():
+    """Test parsing terpene cylcisation patterns."""
+    tests = [
+        ('Cyclization pattern: 1-10-STC', {'from_carbon': 1, 'to_carbon': 10, 'synthase_type': 'STC'}),
+        ('Cyclization pattern: 1-14-DTC', {'from_carbon': 1, 'to_carbon': 14, 'synthase_type': 'DTC'}),
+        ('Cyclization pattern: 1-6-MTC', {'from_carbon': 1, 'to_carbon': 6, 'synthase_type': 'MTC'}),
+        ('Cyclization pattern: no prediction', {}),
+        ('Nothing to see here', {}),
+    ]
+
+    for test_string, expected in tests:
+        fake = FakeFeature()
+        fake.qualifiers['note'] = [test_string]
+        assert parse_terpene_cyclisation(fake) == expected
