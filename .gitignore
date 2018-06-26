@@ -1,3 +1,4 @@
 *.swp
 *.pyc
 example/*
+imported.txt
