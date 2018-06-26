@@ -17,8 +17,18 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
-# the black list contains accessions that contain duplicate locus tags
-BLACKLIST = []  # type: t.Sequence[str]
+# the black list contains accessions that contain duplicate or invalid locus tags
+BLACKLIST = [
+    'NC_017443',
+    'NC_017447',
+    'NZ_AONY01000056',
+    'NZ_AOOL01000046',
+    'NZ_AOOR01000035',
+    'NZ_CP024070',
+    'NZ_KE136343',
+    'NZ_AOOE01000052',
+    'NZ_CP022430',
+]
 REPORTED_TYPES = set()
 
 
