@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Import a GenBank results file into the antiSMASH database."""
 from __future__ import print_function
 from collections import defaultdict
