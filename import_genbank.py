@@ -43,11 +43,20 @@ def main():
     recs = SeqIO.parse(sys.argv[1], 'genbank')
     with connection:
         with connection.cursor() as cursor:
+            assembly_id = None
             for rec in recs:
                 if rec.name in BLACKLIST:
                     print('Skipping blacklisted record {!r}'.format(rec.name), file=sys.stderr)
                     continue
+                if not assembly_id:
+                    assembly_id = get_assembly_id(rec)
                 load_record(rec, cursor)
+            if assembly_id:
+                assembly_id = assembly_id.split('.')[0]
+                input_basename = os.path.basename(sys.argv[1])
+                if input_basename.endswith('.final.gbk'):
+                    input_basename = input_basename[:-10]
+                cursor.execute("INSERT INTO antismash.filenames (assembly_id, base_filename) VALUES (%s, %s)", (assembly_id, input_basename))
 
     connection.close()
 
