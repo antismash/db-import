@@ -763,6 +763,7 @@ def handle_cluster(rec, cur, seq_id, feature):
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
     params['evidence'] = 'prediction'
     print("locus_id: {}".format(params['locus_id']))
+    params['contig_edge'] = feature.qualifiers.get('contig_edge', 'False') == 'True'
 
     for note in feature.qualifiers['note']:
         if note.startswith('Cluster number: '):
@@ -772,9 +773,10 @@ def handle_cluster(rec, cur, seq_id, feature):
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
-INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id)
-SELECT val.cluster_number::int4, val.locus_id, f.evidence_id FROM (
-    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s) ) val (cluster_number, locus_id, evidence)
+INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id, contig_edge)
+SELECT val.cluster_number::int4, val.locus_id, f.evidence_id, val.contig_edge FROM (
+    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s, %(contig_edge)s) ) val
+    (cluster_number, locus_id, evidence, contig_edge)
 LEFT JOIN antismash.evidences f ON val.evidence = f.name
 RETURNING bgc_id
 """, params)
