@@ -33,18 +33,24 @@ BLACKLIST = [
 REPORTED_TYPES = set()
 
 MINIMAL = False
+VISIBILITY = 'public'
 
 def main():
     """Run the import."""
     global MINIMAL
+    global VISIBILITY
+
     parser = ArgumentParser()
     parser.add_argument('--minimal', action='store_true', default=False,
                         help="Set when importing results of a minimal/fast mode antiSMASH run")
+    parser.add_argument('--visibility', choices=['public'], default='public',
+                        help="Set the record visibility (default: %(default)s)")
     parser.add_argument('filename')
     args = parser.parse_args()
 
     if args.minimal:
         MINIMAL = True
+    VISIBILITY = args.visibility
 
     connection = psycopg2.connect(DB_CONNECTION)
 
@@ -773,6 +779,7 @@ def handle_cluster(rec, cur, seq_id, feature):
     print("locus_id: {}".format(params['locus_id']))
     params['contig_edge'] = feature.qualifiers.get('contig_edge', 'False') == 'True'
     params['minimal'] = MINIMAL
+    params['visibility'] = VISIBILITY
 
     for note in feature.qualifiers['note']:
         if note.startswith('Cluster number: '):
@@ -782,11 +789,12 @@ def handle_cluster(rec, cur, seq_id, feature):
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
-INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id, contig_edge, minimal)
-SELECT val.cluster_number::int4, val.locus_id, f.evidence_id, val.contig_edge, val.minimal FROM (
-    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s, %(contig_edge)s, %(minimal)s) ) val
-    (cluster_number, locus_id, evidence, contig_edge, minimal)
+INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id, visibility_id, contig_edge, minimal)
+SELECT val.cluster_number::int4, val.locus_id, f.evidence_id, v.visibility_id, val.contig_edge, val.minimal FROM (
+    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s, %(visibility)s, %(contig_edge)s, %(minimal)s) ) val
+    (cluster_number, locus_id, evidence, visibility, contig_edge, minimal)
 LEFT JOIN antismash.evidences f ON val.evidence = f.name
+LEFT JOIN antismash.visibilities v ON val.visibility = v.name
 RETURNING bgc_id
 """, params)
         ret = cur.fetchone()
