@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Import a GenBank results file into the antiSMASH database."""
 from __future__ import print_function
+from argparse import ArgumentParser
 from collections import defaultdict
 import hashlib
 import os
@@ -31,16 +32,23 @@ BLACKLIST = [
 ]
 REPORTED_TYPES = set()
 
+MINIMAL = False
 
 def main():
     """Run the import."""
-    if len(sys.argv) < 2:
-        print('Usage: {} <gbk file>'.format(sys.argv[0]), file=sys.stderr)
-        sys.exit(2)
+    global MINIMAL
+    parser = ArgumentParser()
+    parser.add_argument('--minimal', action='store_true', default=False,
+                        help="Set when importing results of a minimal/fast mode antiSMASH run")
+    parser.add_argument('filename')
+    args = parser.parse_args()
+
+    if args.minimal:
+        MINIMAL = True
 
     connection = psycopg2.connect(DB_CONNECTION)
 
-    recs = SeqIO.parse(sys.argv[1], 'genbank')
+    recs = SeqIO.parse(args.filename, 'genbank')
     with connection:
         with connection.cursor() as cursor:
             assembly_id = None
@@ -53,7 +61,7 @@ def main():
                 load_record(rec, cursor)
             if assembly_id:
                 assembly_id = assembly_id.split('.')[0]
-                input_basename = os.path.basename(sys.argv[1])
+                input_basename = os.path.basename(args.filename)
                 if input_basename.endswith('.final.gbk'):
                     input_basename = input_basename[:-10]
                 cursor.execute("INSERT INTO antismash.filenames (assembly_id, base_filename) VALUES (%s, %s)", (assembly_id, input_basename))
@@ -764,6 +772,7 @@ def handle_cluster(rec, cur, seq_id, feature):
     params['evidence'] = 'prediction'
     print("locus_id: {}".format(params['locus_id']))
     params['contig_edge'] = feature.qualifiers.get('contig_edge', 'False') == 'True'
+    params['minimal'] = MINIMAL
 
     for note in feature.qualifiers['note']:
         if note.startswith('Cluster number: '):
@@ -773,10 +782,10 @@ def handle_cluster(rec, cur, seq_id, feature):
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
-INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id, contig_edge)
-SELECT val.cluster_number::int4, val.locus_id, f.evidence_id, val.contig_edge FROM (
-    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s, %(contig_edge)s) ) val
-    (cluster_number, locus_id, evidence, contig_edge)
+INSERT INTO antismash.biosynthetic_gene_clusters (cluster_number, locus_id, evidence_id, contig_edge, minimal)
+SELECT val.cluster_number::int4, val.locus_id, f.evidence_id, val.contig_edge, val.minimal FROM (
+    VALUES (%(cluster_number)s, %(locus_id)s, %(evidence)s, %(contig_edge)s, %(minimal)s) ) val
+    (cluster_number, locus_id, evidence, contig_edge, minimal)
 LEFT JOIN antismash.evidences f ON val.evidence = f.name
 RETURNING bgc_id
 """, params)
