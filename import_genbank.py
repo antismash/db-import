@@ -586,7 +586,7 @@ def handle_asdomain(rec, cur, seq_id, feature):
         params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
         params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
         params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
-        params['as_domain_profile_id'] = get_as_domain_profile_id(cur, feature.qualifiers.get('domain', [None])[0])
+        params['as_domain_profile_id'] = get_as_domain_profile_id(cur, feature.qualifiers.get('domain_subtype', feature.qualifiers.get('domain', [None]))[0])
 
         parse_specificity(feature, params)
 
