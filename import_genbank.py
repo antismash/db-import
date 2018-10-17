@@ -64,7 +64,7 @@ def main():
                     continue
                 if not assembly_id:
                     assembly_id = get_assembly_id(rec)
-                load_record(rec, cursor)
+                load_record(rec, cursor, assembly_id)
             if assembly_id:
                 assembly_id = assembly_id.split('.')[0]
                 input_basename = os.path.basename(args.filename)
@@ -75,9 +75,9 @@ def main():
     connection.close()
 
 
-def load_record(rec, cur):
+def load_record(rec, cur, assembly_id):
     """Load a record into the database using the cursor."""
-    genome_id = get_or_create_genome(rec, cur)
+    genome_id = get_or_create_genome(rec, cur, assembly_id)
     print("genome_id: {}".format(genome_id))
     seq_id = get_or_create_dna_sequence(rec, cur, genome_id)
     print("seq_id: {}".format(seq_id))
@@ -122,14 +122,13 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
     return ret[0]
 
 
-def get_or_create_genome(rec, cur):
+def get_or_create_genome(rec, cur, assembly_id):
     """Fetch existing genome entry or create a new one."""
     try:
         taxid = get_or_create_tax_id(cur, get_taxid(rec), get_strain(rec))
     except psycopg2.ProgrammingError:
         print(rec)
         raise
-    assembly_id = get_assembly_id(rec)
     cur.execute("SELECT genome_id FROM antismash.genomes WHERE tax_id = %s AND assembly_id = %s", (taxid, assembly_id))
     ret = cur.fetchone()
     if ret is None:
