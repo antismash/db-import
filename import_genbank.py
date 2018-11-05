@@ -777,7 +777,7 @@ def handle_cluster(rec, cur, seq_id, feature):
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
     params['evidence'] = 'prediction'
     print("locus_id: {}".format(params['locus_id']))
-    params['contig_edge'] = feature.qualifiers.get('contig_edge', 'False') == 'True'
+    params['contig_edge'] = feature.qualifiers.get('contig_edge', ['False'])[0] == 'True'
     params['minimal'] = MINIMAL
     params['visibility'] = VISIBILITY
 
