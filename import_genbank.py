@@ -930,6 +930,8 @@ LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term
 
 def get_or_create_tax_id(cur, taxid, strain):
     """Get the tax_id or create a new one."""
+    if taxid == 0:
+        return 0
     cur.execute("SELECT tax_id FROM antismash.taxa WHERE tax_id = %s", (taxid, ))
     ret = cur.fetchone()
     if ret is None:
