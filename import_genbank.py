@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Import a GenBank results file into the antiSMASH database."""
-from __future__ import print_function
 from argparse import ArgumentParser
 from collections import defaultdict
 import hashlib
 import os
 import sys
-import typing as t
 import re
-from Bio import Entrez, SeqIO
 import urllib
+
+from Bio import Entrez, SeqIO
 import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
@@ -34,6 +33,7 @@ REPORTED_TYPES = set()
 
 MINIMAL = False
 VISIBILITY = 'public'
+
 
 def main():
     """Run the import."""
@@ -172,6 +172,7 @@ def get_assembly_id(rec):
         return ref[9:]
 
     return None
+
 
 def get_or_create_locus(cur, seq_id, feature):
     """Get or create a new locus tag."""
@@ -345,7 +346,7 @@ def parse_terpene_cyclisation(feature):
     """Parse terpene cyclisation patterns."""
     detected = {}
 
-    if not 'note' in feature.qualifiers:
+    if 'note' not in feature.qualifiers:
         return detected
 
     for note in feature.qualifiers['note']:
@@ -770,7 +771,6 @@ def parse_specificity(feature, params):
                 continue
 
 
-
 def handle_cluster(rec, cur, seq_id, feature):
     """Handle cluster features."""
     params = defaultdict(lambda: None)
@@ -978,4 +978,3 @@ def get_lineage(taxid):
 
 if __name__ == "__main__":
     main()
-
