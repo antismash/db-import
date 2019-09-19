@@ -8,7 +8,8 @@ import sys
 import re
 import urllib
 
-from Bio import Entrez, SeqIO
+import antismash
+from Bio import Entrez
 import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
@@ -16,7 +17,6 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
 DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
-SMCOG_PATTERN = re.compile(r"smCOG: (SMCOG[\d]{4}):[\w'`:,/\s\(\)\[\]-]+\(Score: ([\d.e-]+); E-value: ([\d.e-]+)\);")
 # the black list contains accessions that contain duplicate or invalid locus tags
 BLACKLIST = [
     'NC_017443',
@@ -54,7 +54,7 @@ def main():
 
     connection = psycopg2.connect(DB_CONNECTION)
 
-    recs = SeqIO.parse(args.filename, 'genbank')
+    recs = antismash.common.secmet.Record.from_genbank(args.filename)
     with connection:
         with connection.cursor() as cursor:
             assembly_id = None
@@ -83,16 +83,21 @@ def load_record(rec, cur, assembly_id):
     print("seq_id: {}".format(seq_id))
 
     FEATURE_HANDLERS = {
-        'CDS': handle_cds,
         'CDS_motif': handle_cds_motif,
         'aSDomain': handle_asdomain,
-        'cluster': handle_cluster,
         'gene': handle_gene,
         'misc_feature': handle_misc_feature,
         'PFAM_domain': handle_pfamdomain,
     }
 
-    for feature in rec.features:
+    for region in sorted(rec.get_regions()):
+        handle_region(rec, cur, seq_id, region)
+        for cds in region.cds_children:
+            handle_cds(rec, cur, seq_id, cds)
+
+    for feature in rec.get_all_features():
+        if feature.type in ["region", "CDS"]:
+            continue
         if feature.type not in FEATURE_HANDLERS:
             if feature.type not in REPORTED_TYPES:
                 print("Skipping unknown feature type", feature.type, file=sys.stderr)
@@ -141,25 +146,26 @@ def get_or_create_genome(rec, cur, assembly_id):
 
 def get_taxid(rec):
     """Extract the taxid from a record."""
-    for feature in rec.features:
+    for feature in rec.get_misc_feature_by_type("source"):
         if feature.type != 'source':
             continue
-        if 'db_xref' not in feature.qualifiers:
+        refs = feature.get_qualifier("db_xref")
+        if refs is None:
             return 0
-        for entry in feature.qualifiers['db_xref']:
+        for entry in refs:
             if entry.startswith('taxon:'):
                 return int(entry[6:])
 
 
 def get_strain(rec):
     """Extract the strain from a record."""
-    for feature in rec.features:
-        if feature.type != 'source':
-            continue
-        if 'strain' in feature.qualifiers:
-            return feature.qualifiers['strain'][0]
-        if 'serovar' in feature.qualifiers:
-            return feature.qualifiers['serovar'][0]
+    for feature in rec.get_misc_feature_by_type("source"):
+        strain = feature.get_qualifier("strain")
+        if strain:
+            return strain[0]
+        serovar = feature.get_qualifier("serovar")
+        if serovar:
+            return serovar[0]
 
     return None
 
@@ -177,8 +183,8 @@ def get_assembly_id(rec):
 def get_or_create_locus(cur, seq_id, feature):
     """Get or create a new locus tag."""
     params = {}
-    params['start_pos'] = feature.location.nofuzzy_start
-    params['end_pos'] = feature.location.nofuzzy_end
+    params['start_pos'] = int(feature.location.start)
+    params['end_pos'] = int(feature.location.end)
     if feature.location.strand == 1:
         params['strand'] = '+'
     elif feature.location.strand == -1:
@@ -207,7 +213,7 @@ def handle_gene(rec, cur, seq_id, feature):
     cur.execute("SELECT gene_id FROM antismash.genes WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
-        params['locus_tag'] = feature.qualifiers['locus_tag'][0]
+        params['locus_tag'] = feature.locus_tag
         cur.execute("INSERT INTO antismash.genes (locus_tag, locus_id) VALUES (%(locus_tag)s, %(locus_id)s)", params)
 
 
@@ -219,13 +225,13 @@ def handle_cds(rec, cur, seq_id, feature):
     cur.execute("SELECT cds_id FROM antismash.cdss WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
-        params['locus_tag'] = feature.qualifiers['locus_tag'][0]
-        params['name'] = feature.qualifiers.get('gene', [None])[0]
-        params['product'] = feature.qualifiers.get('product', [None])[0]
-        params['protein_id'] = feature.qualifiers.get('protein_id', [None])[0]
-        params['func_class'] = get_functional_class(cur, feature)
+        params['locus_tag'] = feature.locus_tag
+        params['name'] = feature.gene
+        params['product'] = feature.product
+        params['protein_id'] = feature.protein_id
+        params['func_class'] = str(feature.gene_function)
         params['evidence'] = 'prediction'
-        params['translation'] = get_translation(feature)
+        params['translation'] = feature.translation
         cur.execute("""
 INSERT INTO antismash.cdss (
     functional_class_id,
@@ -243,20 +249,21 @@ INSERT INTO antismash.cdss (
 """, params)
         ret = cur.fetchone()
     cds_id = ret[0]
-    create_smcog_hit(cur, feature, cds_id)
+    for gene_function in feature.gene_functions.get_by_tool("smcogs"):
+        create_smcog_hit(cur, gene_function, cds_id)
+        print("     Skipping all  but first SMCOG"); break  # TODO
     create_profile_hits(cur, feature, cds_id)
-    create_terpene_cyclisations(cur, feature, cds_id)
 
 
 def handle_misc_feature(rec, cur, seq_id, feature):
     """Handle (a subset of) misc_feature features."""
 
     # only want to handle misc_features created by antiSMASH
-    if 'tool' not in feature.qualifiers or 'antiSMASH'not in feature.qualifiers['tool']:
+    if not feature.created_by_antismash:
         return
 
     is_tta_codon = False
-    for entry in feature.qualifiers['note']:
+    for entry in feature.notes:
         if entry.startswith("tta leucine codon"):
             is_tta_codon = True
             break
@@ -273,25 +280,19 @@ def handle_misc_feature(rec, cur, seq_id, feature):
         cur.execute("INSERT INTO antismash.tta_codons (locus_id) VALUES ( %(locus_id)s )", params)
 
 
-def create_smcog_hit(cur, feature, cds_id):
+def create_smcog_hit(cur, gene_function, cds_id):
     """Create an smCOG hit entry."""
-    try:
-        smcog_name, smcog_score, smcog_evalue = parse_smcog(feature)
-        smcog_score = float(smcog_score)
-        smcog_evalue = float(smcog_evalue)
-        smcog_id = get_smcog_id(cur, smcog_name)
-        cur.execute("SELECT cds_id, smcog_id FROM antismash.smcog_hits WHERE "
-                    "smcog_id = %s AND cds_id = %s", (smcog_id, cds_id))
-        ret = cur.fetchone()
-        if ret is None:
-            cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_id, cds_id)"
-                        "VALUES (%s, %s, %s, %s)", (smcog_score, smcog_evalue, smcog_id, cds_id))
-    except ValueError as e:
-        # no smcog qualifier is an expected error, don't log that
-        err_msg = str(e)
-        if not (err_msg.startswith('No smcog qualifier') or
-                err_msg.startswith('No note qualifier')):
-            print(e, file=sys.stderr)
+    assert gene_function.tool == "smcogs"
+    smcog_name = gene_function.product
+    smcog_score = 0  # TODO
+    smcog_evalue = 100.0  # TODO
+    smcog_id = get_smcog_id(cur, smcog_name)
+    cur.execute("SELECT cds_id, smcog_id FROM antismash.smcog_hits WHERE "
+                "smcog_id = %s AND cds_id = %s", (smcog_id, cds_id))
+    ret = cur.fetchone()
+    if ret is None:
+        cur.execute("INSERT INTO antismash.smcog_hits (score, evalue, smcog_id, cds_id)"
+                    "VALUES (%s, %s, %s, %s)", (smcog_score, smcog_evalue, smcog_id, cds_id))
 
 
 def create_profile_hits(cur, feature, cds_id):
@@ -317,88 +318,18 @@ INSERT INTO antismash.profile_hits (cds_id, name, evalue, bitscore, seeds)
                 raise
 
 
-def create_terpene_cyclisations(cur, feature, cds_id):
-    """Create terpene cyclisations entry"""
-    detected = parse_terpene_cyclisation(feature)
-    if not detected:
-        return
-
-    detected['cds_id'] = cds_id
-    cur.execute("""
-SELECT cds_id FROM antismash.terpene_cyclisations LEFT JOIN antismash.terpenes USING (terpene_id) WHERE
-    cds_id = %(cds_id)s AND
-    from_carbon = %(from_carbon)s AND
-    to_carbon = %(to_carbon)s AND
-    name = %(synthase_type)s""", detected)
-    ret = cur.fetchone()
-
-    if ret is None:
-        cur.execute("""
-INSERT INTO antismash.terpene_cyclisations (terpene_id, cds_id, from_carbon, to_carbon) VALUES (
-    (SELECT terpene_id FROM antismash.terpenes WHERE name = %(synthase_type)s),
-    %(cds_id)s,
-    %(from_carbon)s,
-    %(to_carbon)s
-)""", detected)
-
-
-def parse_terpene_cyclisation(feature):
-    """Parse terpene cyclisation patterns."""
-    detected = {}
-
-    if 'note' not in feature.qualifiers:
-        return detected
-
-    for note in feature.qualifiers['note']:
-        if not note.startswith('Cyclization pattern: '):
-            continue
-        if note.endswith('no prediction'):
-            return detected
-
-        parts = note[21:].split('-')
-        if len(parts) != 3:
-            return detected
-
-        try:
-            detected['from_carbon'] = int(parts[0])
-            detected['to_carbon'] = int(parts[1])
-            detected['synthase_type'] = parts[2]
-        except ValueError:
-            return {}
-        break
-
-    return detected
-
-
 def parse_domains_detected(feature):
     """Parse detected domains."""
-    pattern = re.compile(r'([\w-]+) \(E-value: ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?), '
-                         r'bitscore: ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?), seeds: (\d+)')
     domains = []
-    if 'sec_met' not in feature.qualifiers:
+    if not feature.sec_met:
         return domains
 
-    domain_line = None
-    for secmet_line in feature.qualifiers['sec_met']:
-        prefix = 'Domains detected: '
-        if secmet_line.startswith(prefix):
-            domain_line = secmet_line[len(prefix):]
-            break
-
-    if domain_line is None:
-        return domains
-
-    for domain in domain_line.split(';'):
-        match = pattern.search(domain)
-        if not match:
-            print("no match found for", domain, file=sys.stderr)
-            print("line:", domain_line, file=sys.stderr)
-            continue
+    for domain in feature.sec_met.domains:
         dom = {}
-        dom['name'] = match.group(1)
-        dom['evalue'] = match.group(2)
-        dom['bitscore'] = match.group(4)
-        dom['seeds'] = match.group(6)
+        dom['name'] = domain.name
+        dom['evalue'] = domain.evalue
+        dom['bitscore'] = domain.bitscore
+        dom['seeds'] = domain.nseeds
         domains.append(dom)
 
     return domains
@@ -421,67 +352,20 @@ def get_smcog_id(cur, smcog):
     return ret[0]
 
 
-def get_functional_class(cur, feature):
-    """Get the functional class from a CDS feature."""
-    func_class = 'other'
-    try:
-        smcog, _, _ = parse_smcog(feature)
-        cur.execute("""
-SELECT name FROM antismash.functional_classes WHERE functional_class_id =
-    (SELECT functional_class_id FROM antismash.smcogs WHERE name = %s)""", (smcog,))
-        ret = cur.fetchone()
-        if ret is not None:
-            func_class = ret[0]
-    except ValueError:
-        pass
-
-    if 'sec_met' not in feature.qualifiers:
-        return func_class
-
-    for entry in feature.qualifiers['sec_met']:
-        if entry.startswith('Kind: '):
-            func_class = entry[6:]
-            if func_class == 'biosynthetic':
-                func_class = 'bgc_seed'
-                return func_class
-            break
-
-    return func_class
-
-
-def parse_smcog(feature):
-    """Parse the smCOG feature qualifier."""
-    if 'note' not in feature.qualifiers:
-        raise ValueError('No note qualifier in {}'.format(feature))
-
-    for entry in feature.qualifiers['note']:
-        if not entry.startswith('smCOG:'):
-            continue
-        match = SMCOG_PATTERN.search(entry)
-        if match is None:
-            print(entry)
-            raise ValueError('Failed to parse smCOG line {!r}'.format(entry))
-        return match.groups()
-
-    raise ValueError('No smcog qualifier in {}'.format(feature))
-
-
 def handle_cds_motif(rec, cur, seq_id, feature):
     """Handle CDS_motif features."""
-    if 'aSTool' in feature.qualifiers:
+    if not isinstance(feature, antismash.common.secmet.Prepeptide):
         # This is a CDS_motif from the nrpspks module, ignore
         # We can find all info we need in the aSDomain record
         return
 
-    if 'note' not in feature.qualifiers:
-        return
-
     params = defaultdict(lambda: None)
-    try:
-        params['bgc_id'] = get_bgc_id_from_overlap(cur, seq_id, feature)
-    except ValueError:
-        return
-    params['locus_tag'] = feature.qualifiers['locus_tag'][0]
+    for region in rec.get_regions():
+        if region.overlaps_with(feature):
+            params['bgc_id'] = region.get_region_number()
+            break
+    assert "bgc_id" in params
+    params['locus_tag'] = feature.locus_tag
     parse_ripp_core(feature, params)
     if params['peptide_sequence'] is None:
         return
@@ -524,34 +408,22 @@ INSERT INTO antismash.compounds (
 
 def parse_ripp_core(feature, params):
     """Parse RIPP core features."""
-    for note in feature.qualifiers['note']:
-        if note.startswith('monoisotopic mass:'):
-            params['monoisotopic_mass'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('molecular weight:'):
-            params['molecular_weight'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('alternative weights:'):
-            params['alternative_weights'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('number of bridges:'):
-            params['bridges'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('predicted core seq:'):
-            params['peptide_sequence'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('predicted class:'):
-            params['class'] = note.split(':')[-1].strip()
-            continue
-        if note.startswith('score:'):
-            params['score'] = note.split(':')[-1].strip()
-            continue
+    params['monoisotopic_mass'] = feature.monoisotopic_mass
+    params['molecular_weight'] = feature.molecular_weight
+    params['alternative_weights'] = str(feature.alternative_weights)
+    params['class'] = feature.peptide_class
+    params['score'] = feature.score
+    params['peptide_sequence'] = feature.core
+    if feature.detailed_information:
+        bridges = feature.detailed_information.to_biopython_qualifiers().get("number_of_bridges")
+        if bridges is not None:
+            params["bridges"] = bridges
 
 
 def get_bgc_id_from_overlap(cur, seq_id, feature):
     """Query for bgc_ids that contain the feature."""
-    start_pos = feature.location.nofuzzy_start
-    end_pos = feature.location.nofuzzy_end
+    start_pos = int(feature.location.start)
+    end_pos = int(feature.location.end)
     cur.execute("""
 SELECT bgc.bgc_id FROM antismash.biosynthetic_gene_clusters bgc JOIN antismash.loci l USING (locus_id)
     WHERE l.sequence_id = %s AND int4range(l.start_pos, l.end_pos) @> int4range(%s, %s)""",
@@ -582,12 +454,12 @@ def handle_asdomain(rec, cur, seq_id, feature):
     cur.execute("SELECT as_domain_id FROM antismash.as_domains WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
-        params['score'] = float(feature.qualifiers['score'][0]) if 'score' in feature.qualifiers else None
-        params['evalue'] = float(feature.qualifiers['evalue'][0]) if 'evalue' in feature.qualifiers else None
-        params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
-        params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
-        params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
-        params['as_domain_profile_id'] = get_as_domain_profile_id(cur, feature.qualifiers.get('domain_subtype', feature.qualifiers.get('domain', [None]))[0])
+        params['score'] = feature.score
+        params['evalue'] = feature.evalue
+        params['translation'] = feature.translation
+        params['locus_tag'] = feature.locus_tag
+        params['detection'] = feature.detection
+        params['as_domain_profile_id'] = get_as_domain_profile_id(cur, feature.domain_subtype or feature.domain)
 
         parse_specificity(feature, params)
 
@@ -658,13 +530,13 @@ def handle_pfamdomain(rec, cur, seq_id, feature):
     cur.execute("SELECT pfam_domain_id FROM antismash.pfam_domains WHERE locus_id = %s", (params['locus_id'],))
     ret = cur.fetchone()
     if ret is None:
-        params['score'] = float(feature.qualifiers['score'][0]) if 'score' in feature.qualifiers else None
-        params['evalue'] = float(feature.qualifiers['evalue'][0]) if 'evalue' in feature.qualifiers else None
-        params['translation'] = feature.qualifiers['translation'][0] if 'translation' in feature.qualifiers else None
-        params['locus_tag'] = feature.qualifiers['locus_tag'][0] if 'locus_tag' in feature.qualifiers else None
-        params['detection'] = feature.qualifiers['detection'][0] if 'detection' in feature.qualifiers else None
-        params['database'] = feature.qualifiers['database'][0] if 'database' in feature.qualifiers else None
-        params['pfam_id'] = get_pfam_id(cur, feature.qualifiers.get('db_xref', [None])[0])
+        params['score'] = feature.score
+        params['evalue'] = feature.evalue
+        params['translation'] = feature.translation
+        params['locus_tag'] = feature.locus_tag
+        params['detection'] = feature.detection
+        params['database'] = feature.database
+        params['pfam_id'] = get_pfam_id(cur, feature.identifier)
 
         cur.execute("""
 INSERT INTO antismash.pfam_domains (
@@ -688,19 +560,13 @@ INSERT INTO antismash.pfam_domains (
 )""", params)
 
 
-def get_pfam_id(cur, xref):
+def get_pfam_id(cur, identifier):
     """Get the pfam_id for a domain by db_xref string."""
-    if xref is None:
-        return None
-
-    if not xref.startswith("PFAM: "):
-        raise ValueError("Invalid db_xref trying to parse pfam_id: {!r}".format(xref))
-
-    pfam = xref.split()[-1].strip()
-    cur.execute("SELECT pfam_id FROM antismash.pfams WHERE pfam_id = %s", (pfam,))
+    assert identifier
+    cur.execute("SELECT pfam_id FROM antismash.pfams WHERE pfam_id = %s", (identifier,))
     ret = cur.fetchone()
     if ret is None:
-        raise ValueError("Invalid pfam_id {!r}".format(pfam))
+        raise ValueError("Invalid pfam_id {!r}".format(identifier))
 
     return ret[0]
 
@@ -731,59 +597,37 @@ def get_or_create_monomer(cur, name):
 
 def parse_specificity(feature, params):
     """Parse the feature's specificity entries."""
-    if 'specificity' in feature.qualifiers:
-        for spec in feature.qualifiers['specificity']:
-            if spec.startswith('KR activity: '):
-                params['kr_activity'] = False if spec.endswith('inactive') else True
-                continue
-            if spec.startswith('KR stereochemistry: '):
-                params['kr_stereochemistry'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('NRPSpredictor3 SVM: '):
-                params['nrps_predictor'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('Stachelhaus code: '):
-                params['stachelhaus'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('Minowa: '):
-                params['minowa'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('pHMM: '):
-                params['phmm'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('PrediCAT '):
-                params['predicat'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('PID to NN: '):
-                params['pid'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('SNN score: '):
-                params['snn_score'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('PKS signature: '):
-                params['pks_signature'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('consensus: '):
-                params['consensus'] = spec.split(':')[-1].strip()
-                continue
-            if spec.startswith('SANDPUMA ensemble: '):
-                params['consensus'] = spec.split(':')[-1].strip()
-                continue
+    for prediction in feature.specificity:
+        method, pred = prediction.split(": ", 1)
+        if method == 'KR activity':
+            params['kr_activity'] = not pred.endswith('inactive')
+        elif method == 'KR stereochemistry':
+            params['kr_stereochemistry'] = pred
+        elif method == 'NRPSpredictor':
+            params['nrps_predictor'] = pred
+        elif method == 'Stachelhaus':
+            params['stachelhaus'] = pred
+        elif method == 'Minowa':
+            params['minowa'] = pred
+        elif method == 'PKS signature':
+            params['pks_signature'] = pred
+        elif method == 'consensus':
+            params['consensus'] = pred
+        else:
+            raise ValueError("unknown method: %s")
 
 
-def handle_cluster(rec, cur, seq_id, feature):
+def handle_region(rec, cur, seq_id, feature):
     """Handle cluster features."""
     params = defaultdict(lambda: None)
     params['locus_id'] = get_or_create_locus(cur, seq_id, feature)
     params['evidence'] = 'prediction'
     print("locus_id: {}".format(params['locus_id']))
-    params['contig_edge'] = feature.qualifiers.get('contig_edge', ['False'])[0] == 'True'
+    params['contig_edge'] = feature.contig_edge
     params['minimal'] = MINIMAL
     params['visibility'] = VISIBILITY
 
-    for note in feature.qualifiers['note']:
-        if note.startswith('Cluster number: '):
-            params['cluster_number'] = note.split(':')[-1].strip()
+    params["cluster_number"] = feature.get_region_number()
 
     cur.execute("SELECT bgc_id FROM antismash.biosynthetic_gene_clusters WHERE locus_id = %(locus_id)s", params)
     ret = cur.fetchone()
@@ -799,23 +643,37 @@ RETURNING bgc_id
 """, params)
         ret = cur.fetchone()
     params['bgc_id'] = ret[0]
+    assert params['bgc_id']
 
-    for product in feature.qualifiers['product'][0].split('-'):
-        product = product.lower().replace(' ', '')
+    for product in feature.products:
+        product = product.lower()
         try:
             nx_create_rel_clusters_types(cur, params, product)
         except psycopg2.IntegrityError:
-            print("Failed to insert product type", product)
-            raise
+            raise RuntimeError("no definition in schema for product type: %s", product)
 
-    store_clusterblast(cur, feature, 'clusterblast', params['bgc_id'])
-    store_clusterblast(cur, feature, 'knownclusterblast', params['bgc_id'])
-    store_clusterblast(cur, feature, 'subclusterblast', params['bgc_id'])
+    print("         skipping clusterblast parts")  # TODO
+#    store_clusterblast(cur, feature, 'clusterblast', params['bgc_id'])
+#    store_clusterblast(cur, feature, 'knownclusterblast', params['bgc_id'])
+#    store_clusterblast(cur, feature, 'subclusterblast', params['bgc_id'])
 
-    monomer_list, monomer_str = parse_monomers(feature)
-    if monomer_str is None:
+    flat_monomers = []
+    nested_monomers = []
+    for cds in feature.cds_children:
+        cds_monomers = []
+        for module in cds.modules:
+            assert not module.is_multigene_module()
+            monomers = [monomer for _, monomer in module.monomers]
+            cds_monomers.extend(monomers)
+            flat_monomers.append(monomers)
+        if cds_monomers:
+            nested_monomers.append(cds_monomers)
+
+    if not flat_monomers:
         # We don't have a compound prediction at this stage
         return
+
+    monomer_str = " + ".join("(%s)" % " - ".join(cds_monomers) for cds_monomers in nested_monomers)
 
     cur.execute("SELECT compound_id FROM antismash.compounds WHERE peptide_sequence = %s", (monomer_str,))
     ret = cur.fetchone()
@@ -832,7 +690,7 @@ RETURNING bgc_id
         cur.execute("INSERT INTO antismash.rel_clusters_compounds (bgc_id, compound_id) VALUES (%s, %s)",
                     (params['bgc_id'], compound_id))
 
-    for i, monomers in enumerate(monomer_list):
+    for i, monomers in enumerate(flat_monomers):
         position = i + 1
         for monomer in monomers:
             monomer_id = get_or_create_monomer(cur, monomer)
@@ -900,21 +758,10 @@ def parse_clusterblast_line(line):
     return res
 
 
-def parse_monomers(feature):
-    """Parse a feature's monomoers string."""
-    for note in feature.qualifiers['note']:
-        if note.startswith('Monomers prediction: '):
-            monomers_str = note.split(':')[-1].strip()
-            if monomers_str == '':
-                return [], None
-            monomers_condensed = monomers_str.replace('(', '').replace(')', '').replace(' ', '').replace('+', '-')
-            monomers = monomers_condensed.split('-')
-            return [monomer.split('|') for monomer in monomers], monomers_str
-    return [], None
-
-
 def nx_create_rel_clusters_types(cur, params, product):
     """Create relation table to bgc_types."""
+    assert params.get("bgc_id")
+    assert product
     cur.execute("""
 SELECT * FROM antismash.rel_clusters_types WHERE bgc_id = %s AND
     bgc_type_id = (SELECT bgc_type_id FROM antismash.bgc_types WHERE term = %s)""",
@@ -924,8 +771,8 @@ SELECT * FROM antismash.rel_clusters_types WHERE bgc_id = %s AND
         cur.execute("""
 INSERT INTO antismash.rel_clusters_types (bgc_id, bgc_type_id)
 SELECT val.bgc_id, f.bgc_type_id FROM ( VALUES (%s, %s) ) val (bgc_id, bgc_type)
-LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term
-""", (params['bgc_id'], product))
+LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term""",
+                    (params['bgc_id'], product))
 
 
 def get_or_create_tax_id(cur, taxid, strain):
