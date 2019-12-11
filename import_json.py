@@ -440,7 +440,7 @@ def parse_ripp_core(feature, params):
             params["bridges"] = int(bridges)
 
 
-def handle_asdomain(data, domain, module_id, function_id):
+def handle_asdomain(data, domain, module_id, function_id, follows):
     """Handle aSDomain features."""
     params = {}
     params['pks_signature'] = None
@@ -461,6 +461,7 @@ def handle_asdomain(data, domain, module_id, function_id):
     params['as_domain_profile_id'] = get_as_domain_profile_id(data.cursor, domain.domain_subtype or domain.domain)
     params['function_id'] = function_id
     params['module_id'] = module_id
+    params['follows'] = follows
 
     parse_specificity(domain, params)
 
@@ -482,7 +483,8 @@ INSERT INTO antismash.as_domains (
     location,
     cds_id,
     module_id,
-    function_id
+    function_id,
+    follows
 ) VALUES (
     %(detection)s,
     %(score)s,
@@ -499,22 +501,23 @@ INSERT INTO antismash.as_domains (
     %(location)s,
     %(cds_id)s,
     %(module_id)s,
-    %(function_id)s
+    %(function_id)s,
+    %(follows)s
 ) RETURNING as_domain_id""", params)
     except psycopg2.ProgrammingError:
         print("error fetching cds_id for locus_tag", params['locus_tag'])
         raise
     data.feature_mapping[domain] = as_domain_id
-
+    print(as_domain_id, domain, "follows", follows)
     if params['consensus'] is None:
-        return
+        return as_domain_id
 
     for substrate in params['consensus'].split('|'):
         substrate_id = get_substrate(data.cursor, substrate)
         assert substrate_id is not None
         data.insert("INSERT INTO antismash.rel_as_domains_substrates (as_domain_id, substrate_id) VALUES "
                     "(%s, %s)", (as_domain_id, substrate_id))
-    return
+    return as_domain_id
 
 
 def get_go_id(cursor, go_identifier):
@@ -750,7 +753,8 @@ RETURNING module_id"""
     }
     modification_domains = {domain_results.domain_features[component.domain] for component in raw_module._modifications}
 
-    for domain in secmet_module.domains:
+    previous = None
+    for domain in sorted(secmet_module.domains, key=lambda x: x.protein_location.start):
         function = "other"
         for label, component in singles.items():
             if component and domain is domain_results.domain_features[component.domain]:
@@ -759,7 +763,7 @@ RETURNING module_id"""
         else:
             if domain in modification_domains:
                 function = "modification"
-        handle_asdomain(data, domain, module_id, handle_module._domain_function_mapping[function])
+        previous = handle_asdomain(data, domain, module_id, handle_module._domain_function_mapping[function], follows=previous)
 
     if secmet_module.is_complete():
         for substrate, monomer in secmet_module.get_substrate_monomer_pairs():
