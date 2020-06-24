@@ -38,6 +38,8 @@ DEFAULT_AS_OPTIONS = antismash.config.build_config(["--minimal"], modules=antism
 class ExistingRecordError(ValueError):
     pass
 
+class MissingAssemblyIdError(ValueError):
+    pass
 
 class RecordData:
     def __init__(self, cursor, record, record_id, assembly_id, module_results, minimal):
@@ -92,7 +94,14 @@ def main(filename, minimal):
     with connection.cursor() as cursor:
         try:
             assembly_id = get_assembly_id(results.records[0])
-            print("assembly_id:", assembly_id)
+            if not assembly_id:
+                short_name = os.path.basename(filename)
+                id_parts = short_name.split("_")
+                if id_parts[0] not in ("GCF", "GCA"):
+                    raise MissingAssemblyIdError()
+                assembly_id = "_".join(id_parts[:2])
+
+            print("assembly_id:", assembly_id, end="\t")
             if assembly_id:
                 input_basename = os.path.basename(filename)
                 if input_basename.endswith('.final.gbk'):
