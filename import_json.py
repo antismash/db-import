@@ -650,12 +650,14 @@ def handle_region(data, sequence_id, region):
     params = defaultdict(lambda: None)
     params['contig_edge'] = region.contig_edge
     params['location'] = str(region.location)
+    params['start_pos'] = int(region.location.start)
+    params['end_pos'] = int(region.location.end)
     params['sequence_id'] = sequence_id
     params["region_number"] = region.get_region_number()
 
     region_id = data.insert("""
-INSERT INTO antismash.regions (region_number, accession, location, contig_edge)
-VALUES (%(region_number)s, %(sequence_id)s, %(location)s, %(contig_edge)s)
+INSERT INTO antismash.regions (region_number, accession, location, start_pos, end_pos, contig_edge)
+VALUES (%(region_number)s, %(sequence_id)s, %(location)s, %(start_pos)s, %(end_pos)s, %(contig_edge)s)
 RETURNING region_id""", params)
     params['region_id'] = region_id
     data.feature_mapping[region] = region_id
