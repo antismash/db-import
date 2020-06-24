@@ -86,9 +86,9 @@ def get_return_id(cur):
     return ret[0]
 
 
-def main(filename, minimal):
+def main(filename, db_connection, minimal):
     """Run the import."""
-    connection = psycopg2.connect(DB_CONNECTION)
+    connection = psycopg2.connect(db_connection)
     connection.autocommit = False
 
     results = antismash.common.serialiser.AntismashResults.from_file(filename)
@@ -1054,6 +1054,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--minimal', action='store_true', default=False,
                         help="Set when importing results of a minimal/fast mode antiSMASH run")
+    parser.add_argument('--db', default=DB_CONNECTION, help="DB connection string to use (default: %(default)s)")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
     total_duration = 0
@@ -1062,7 +1063,7 @@ if __name__ == "__main__":
         print("importing", filename)
         start_time = time.time()
         try:
-            main(filename, args.minimal)
+            main(filename, args.db, args.minimal)
         except Exception as err:
             print(filename, err)
         finally:
