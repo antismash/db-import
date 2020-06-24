@@ -43,13 +43,14 @@ class MissingAssemblyIdError(ValueError):
     pass
 
 class RecordData:
-    def __init__(self, cursor, record, record_id, assembly_id, module_results):
+    def __init__(self, cursor, record, record_id, assembly_id, module_results, record_no):
         self.cursor = cursor
         self.record = record
         self.record_id = record_id
         assert record_id
         self.assembly_id = assembly_id
         self.module_results = module_results
+        self.record_no = record_no
 
         self._current_region = None
         self._current_region_id = None
@@ -111,12 +112,14 @@ def main(filename, db_connection):
                     print("skipping previously processed file/assembly")
                     raise ExistingRecordError()
                 cursor.execute("INSERT INTO antismash.filenames (assembly_id, base_filename) VALUES (%s, %s)", (assembly_id, input_basename))
+            record_no = 0
             for rec, module_results in zip(results.records, results.results):
+                record_no += 1
                 if rec.name in BLACKLIST:
                     print('Skipping blacklisted record {!r}'.format(rec.name), file=sys.stderr)
                     continue
                 prepare_record(rec, module_results)
-                load_record(rec, module_results, cursor, assembly_id)
+                load_record(rec, module_results, cursor, assembly_id, record_no)
             connection.commit()
             print("changes committed")
         except ExistingRecordError:
@@ -151,20 +154,20 @@ def prepare_record(record, module_results):
         assert not isinstance(val, dict)
 
 
-def load_record(rec, module_results, cur, assembly_id):
+def load_record(rec, module_results, cur, assembly_id, record_no):
     """Load a record into the database using the cursor."""
     if not rec.get_regions():
         return
     genome_id = get_or_create_genome(rec, cur, assembly_id)
     print("genome_id: {}".format(genome_id))
     try:
-        seq_id = get_or_create_dna_sequence(rec, cur, genome_id)
+        seq_id = get_or_create_dna_sequence(rec, cur, genome_id, record_no)
     except ExistingRecordError:
         print("skipping existing record:", rec.id)
         raise
     print("seq_id: {}".format(seq_id))
 
-    data = RecordData(cur, rec, seq_id, assembly_id, module_results)
+    data = RecordData(cur, rec, seq_id, assembly_id, module_results, record_no)
 
     for region in sorted(rec.get_regions()):
         handle_region(data, seq_id, region)
@@ -178,7 +181,7 @@ def load_record(rec, module_results, cur, assembly_id):
         handle_gene(data, gene)
 
 
-def get_or_create_dna_sequence(rec, cur, genome_id):
+def get_or_create_dna_sequence(rec, cur, genome_id, record_no):
     """Fetch existing dna_sequence entry or create a new one."""
     # record level entry
     params = {}
@@ -188,9 +191,10 @@ def get_or_create_dna_sequence(rec, cur, genome_id):
     params['version'] = rec.annotations.get('sequence_version', '0')
     params['definition'] = rec.description
     params['genome_id'] = genome_id
+    params['record_number'] = record_no
 
-    cur.execute("INSERT INTO antismash.dna_sequences (dna, md5, accession, version, definition, genome_id)"
-                "VALUES (%(seq)s, %(md5sum)s, %(accession)s, %(version)s, %(definition)s, %(genome_id)s)"
+    cur.execute("INSERT INTO antismash.dna_sequences (dna, md5, accession, version, definition, genome_id, record_number)"
+                "VALUES (%(seq)s, %(md5sum)s, %(accession)s, %(version)s, %(definition)s, %(genome_id)s, %(record_number)s)"
                 "RETURNING accession;", params)
     return cur.fetchone()[0]
 
