@@ -610,7 +610,7 @@ def get_substrate(cur, name):
 
 def get_or_create_monomer(cur, name, substrate_id, modified):
     """Get the monomer_id for a monomer by name, create monomer entry if needed."""
-    cur.execute("SELECT monomer_id FROM antismash.monomers WHERE name = %s AND substrate_id = %s", (name.lower(), substrate_id))
+    cur.execute("SELECT monomer_id FROM antismash.monomers WHERE name = %s", (name.lower(),))
     ret = cur.fetchone()
     if ret:
         return ret[0]
