@@ -97,7 +97,7 @@ def main(filename, db_connection):
                     input_basename = input_basename[:-10]
                 cursor.execute("SELECT (assembly_id) FROM antismash.filenames WHERE base_filename = %s AND assembly_id = %s", (input_basename, assembly_id))
                 if cursor.fetchone() is not None:
-                    print("skipping previously processed file/assembly")
+                    #print("skipping previously processed file/assembly")
                     raise ExistingRecordError()
                 cursor.execute("INSERT INTO antismash.filenames (assembly_id, base_filename) VALUES (%s, %s)", (assembly_id, input_basename))
             record_no = 0
@@ -106,13 +106,13 @@ def main(filename, db_connection):
                 prepare_record(rec, module_results)
                 load_record(rec, module_results, cursor, assembly_id, record_no)
             connection.commit()
-            print("changes committed")
+            print(assembly_id, "changes committed", end="\t")
         except ExistingRecordError:
             connection.rollback()
-            print("no changes committed")
+            #print("no changes committed", end="\t")
         except Exception:
             connection.rollback()
-            print("no changes committed")
+            #print("no changes committed", end="\t")
             raise
     connection.close()
 
@@ -144,13 +144,13 @@ def load_record(rec, module_results, cur, assembly_id, record_no):
     if not rec.get_regions():
         return
     genome_id = get_or_create_genome(rec, cur, assembly_id)
-    print("genome_id: {}".format(genome_id))
+    #print("genome_id: {}".format(genome_id))
     try:
         seq_id = get_or_create_dna_sequence(rec, cur, genome_id, record_no)
     except ExistingRecordError:
         print("skipping existing record:", rec.id)
         raise
-    print("seq_id: {}".format(seq_id))
+    #print("seq_id: {}".format(seq_id))
 
     data = RecordData(cur, rec, seq_id, assembly_id, module_results, record_no)
 
@@ -390,9 +390,9 @@ def handle_ripp(data, protocluster, motif):
     params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(motif.locus_tag)]
     parse_ripp_core(motif, params)
     if params['peptide_sequence'] is None:
-        print("skipping ripp without core in", protocluster)
+        #print("skipping ripp without core in", protocluster)
         return
-    print("inserting ripp with core:", params['peptide_sequence'])
+    #print("inserting ripp with core:", params['peptide_sequence'])
     assert params["bridges"] is None or isinstance(params["bridges"], int), params
     data.insert("""
 INSERT INTO antismash.ripps (
@@ -506,7 +506,7 @@ INSERT INTO antismash.as_domains (
         print("error fetching cds_id for locus_tag", params['locus_tag'])
         raise
     data.feature_mapping[domain] = as_domain_id
-    print(as_domain_id, domain, "follows", follows)
+    #print(as_domain_id, domain, "follows", follows)
     if params['consensus'] is None:
         return as_domain_id
 
@@ -1045,7 +1045,7 @@ if __name__ == "__main__":
     total_duration = 0
     total_imports = 1
     for filename in args.filenames:
-        print("importing", filename)
+        #print("importing", filename)
         start_time = time.time()
         try:
             main(filename, args.db)
