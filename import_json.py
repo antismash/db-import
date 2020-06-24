@@ -43,14 +43,13 @@ class MissingAssemblyIdError(ValueError):
     pass
 
 class RecordData:
-    def __init__(self, cursor, record, record_id, assembly_id, module_results, minimal):
+    def __init__(self, cursor, record, record_id, assembly_id, module_results):
         self.cursor = cursor
         self.record = record
         self.record_id = record_id
         assert record_id
         self.assembly_id = assembly_id
         self.module_results = module_results
-        self.minimal = minimal
 
         self._current_region = None
         self._current_region_id = None
@@ -86,7 +85,7 @@ def get_return_id(cur):
     return ret[0]
 
 
-def main(filename, db_connection, minimal):
+def main(filename, db_connection):
     """Run the import."""
     connection = psycopg2.connect(db_connection)
     connection.autocommit = False
@@ -117,7 +116,7 @@ def main(filename, db_connection, minimal):
                     print('Skipping blacklisted record {!r}'.format(rec.name), file=sys.stderr)
                     continue
                 prepare_record(rec, module_results)
-                load_record(rec, module_results, cursor, assembly_id, minimal)
+                load_record(rec, module_results, cursor, assembly_id)
             connection.commit()
             print("changes committed")
         except ExistingRecordError:
@@ -152,7 +151,7 @@ def prepare_record(record, module_results):
         assert not isinstance(val, dict)
 
 
-def load_record(rec, module_results, cur, assembly_id, minimal):
+def load_record(rec, module_results, cur, assembly_id):
     """Load a record into the database using the cursor."""
     if not rec.get_regions():
         return
@@ -165,7 +164,7 @@ def load_record(rec, module_results, cur, assembly_id, minimal):
         raise
     print("seq_id: {}".format(seq_id))
 
-    data = RecordData(cur, rec, seq_id, assembly_id, module_results, minimal)
+    data = RecordData(cur, rec, seq_id, assembly_id, module_results)
 
     for region in sorted(rec.get_regions()):
         handle_region(data, seq_id, region)
@@ -661,14 +660,13 @@ def handle_region(data, sequence_id, region):
     assert region
     params = defaultdict(lambda: None)
     params['contig_edge'] = region.contig_edge
-    params['minimal'] = data.minimal
     params['location'] = str(region.location)
     params['sequence_id'] = sequence_id
     params["region_number"] = region.get_region_number()
 
     region_id = data.insert("""
-INSERT INTO antismash.regions (region_number, record_accession, location, contig_edge, minimal)
-VALUES (%(region_number)s, %(sequence_id)s, %(location)s, %(contig_edge)s, %(minimal)s)
+INSERT INTO antismash.regions (region_number, accession, location, contig_edge)
+VALUES (%(region_number)s, %(sequence_id)s, %(location)s, %(contig_edge)s)
 RETURNING region_id""", params)
     params['region_id'] = region_id
     data.feature_mapping[region] = region_id
@@ -1052,8 +1050,6 @@ def test_delete():
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('--minimal', action='store_true', default=False,
-                        help="Set when importing results of a minimal/fast mode antiSMASH run")
     parser.add_argument('--db', default=DB_CONNECTION, help="DB connection string to use (default: %(default)s)")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
@@ -1063,7 +1059,7 @@ if __name__ == "__main__":
         print("importing", filename)
         start_time = time.time()
         try:
-            main(filename, args.db, args.minimal)
+            main(filename, args.db)
         except Exception as err:
             print(filename, err)
         finally:
