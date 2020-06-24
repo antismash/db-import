@@ -5,6 +5,7 @@ from collections import defaultdict
 import hashlib
 import os
 import sys
+import time
 import urllib
 
 # pylint: disable=line-too-long,missing-docstring
@@ -1055,7 +1056,19 @@ if __name__ == "__main__":
                         help="Set when importing results of a minimal/fast mode antiSMASH run")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
+    total_duration = 0
+    total_imports = 1
     for filename in args.filenames:
         print("importing", filename)
-        main(filename, args.minimal)
-#    test_delete(args)
+        start_time = time.time()
+        try:
+            main(filename, args.minimal)
+        except Exception as err:
+            print(filename, err)
+        finally:
+            end_time = time.time()
+            import_duration = end_time - start_time
+            print("took", round(import_duration, 2), "seconds", end="\t")
+            total_imports += 1
+            total_duration += import_duration
+            print("average:", round(total_duration/total_imports, 2))
