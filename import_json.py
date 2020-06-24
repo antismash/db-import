@@ -19,18 +19,6 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
 DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
-# the black list contains accessions that contain duplicate or invalid locus tags
-BLACKLIST = [
-    'NC_017443',
-    'NC_017447',
-    'NZ_AONY01000056',
-    'NZ_AOOL01000046',
-    'NZ_AOOR01000035',
-    'NZ_CP024070',
-    'NZ_KE136343',
-    'NZ_AOOE01000052',
-    'NZ_CP022430',
-]
 REPORTED_TYPES = set()
 
 DEFAULT_AS_OPTIONS = antismash.config.build_config(["--minimal"], modules=antismash.main.get_all_modules())
@@ -115,9 +103,6 @@ def main(filename, db_connection):
             record_no = 0
             for rec, module_results in zip(results.records, results.results):
                 record_no += 1
-                if rec.name in BLACKLIST:
-                    print('Skipping blacklisted record {!r}'.format(rec.name), file=sys.stderr)
-                    continue
                 prepare_record(rec, module_results)
                 load_record(rec, module_results, cursor, assembly_id, record_no)
             connection.commit()
