@@ -84,7 +84,7 @@ def main(filename, db_connection):
         try:
             assembly_id = get_assembly_id(results.records[0])
             if not assembly_id:
-                short_name = os.path.basename(filename)
+                short_name, _ = os.path.splitext(os.path.basename(filename))
                 id_parts = short_name.split("_")
                 if id_parts[0] not in ("GCF", "GCA"):
                     raise MissingAssemblyIdError()
