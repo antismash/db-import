@@ -776,6 +776,8 @@ VALUES (%s, %s, %s)"""
 
 
 def get_product_id(cur, product):
+    if product.lower() == "nrps":
+        product = "t1nrps"
     cur.execute("SELECT bgc_type_id FROM antismash.bgc_types WHERE term = %s", (product.lower(),))
     ret = cur.fetchone()
     if ret is None:
@@ -855,17 +857,15 @@ def nx_create_rel_regions_types(cur, params, product):
     """Create relation table to bgc_types."""
     assert params.get("region_id")
     assert product
+    product_id = get_product_id(cur, product)
     cur.execute("""
 SELECT * FROM antismash.rel_regions_types WHERE region_id = %s AND
-    bgc_type_id = (SELECT bgc_type_id FROM antismash.bgc_types WHERE term = %s)""",
-                (params['region_id'], product))
+    bgc_type_id = %s""", (params['region_id'], product_id))
     ret = cur.fetchone()
     if ret is None:
         cur.execute("""
 INSERT INTO antismash.rel_regions_types (region_id, bgc_type_id)
-SELECT val.region_id, f.bgc_type_id FROM ( VALUES (%s, %s) ) val (region_id, bgc_type)
-LEFT JOIN antismash.bgc_types f ON val.bgc_type = f.term""",
-                    (params['region_id'], product))
+VALUES (%s, %s)""", (params['region_id'], product_id))
 
 
 def handle_t2pks(data, protocluster):
