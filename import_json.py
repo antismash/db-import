@@ -697,16 +697,31 @@ RETURNING region_id""", params)
 
 
 def handle_region_nrpspks(data):
+    if not hasattr(handle_region_nrpspks, "_domain_function_mapping"):
+        data.cursor.execute("SELECT * FROM antismash.module_domain_functions")
+        handle_region_nrpspks._domain_function_mapping = {func: func_id for func_id, func in data.cursor.fetchall()}
+
+    function_ids = handle_region_nrpspks._domain_function_mapping
+
     modules = []
     domain_results = data.module_results[antismash.detection.nrps_pks_domains.__name__]
     for cds in data.current_region.cds_children:
         if not cds.nrps_pks:
             continue
+        domains_to_id = {}
+        previous = None
+        module_id = None
+        function = None
+        for domain_name in cds.nrps_pks.domain_names:
+            domain = data.record.get_antismash_domain(domain_name)
+            previous = handle_asdomain(data, domain, module_id, function, follows=previous)
+            domains_to_id[domain] = previous
+
         cds_domain_results = domain_results.cds_results[cds]
         for module, raw_module in zip(cds.modules, cds_domain_results.modules):
             modules.append(module)
             assert not module.is_multigene_module()  # this will have to be handled when these are detected
-            handle_module(data, raw_module, cds_domain_results, module)
+            handle_module(data, raw_module, cds_domain_results, module, domains_to_id, function_ids)
 
     if not modules:
         return
@@ -722,7 +737,7 @@ def handle_region_nrpspks(data):
                             (data.feature_mapping[candidate], data.feature_mapping[module]))
 
 
-def handle_module(data, raw_module, domain_results, secmet_module):
+def handle_module(data, raw_module, domain_results, secmet_module, domains_to_id, function_ids):
     statement = """
 INSERT INTO antismash.modules (location, type, complete, iterative, region_id, trans_at)
 VALUES (%(location)s, %(type)s, %(complete)s, %(iterative)s, %(region_id)s, %(trans_at)s)
@@ -740,10 +755,6 @@ RETURNING module_id"""
     module_id = data.insert(statement, values)
     data.feature_mapping[secmet_module] = module_id
 
-    if not hasattr(handle_module, "_domain_function_mapping"):
-        data.cursor.execute("SELECT * FROM antismash.module_domain_functions")
-        handle_module._domain_function_mapping = {func: func_id for func_id, func in data.cursor.fetchall()}
-
     singles = {
         "starter": raw_module._starter,
         "loader": raw_module._loader,
@@ -752,7 +763,6 @@ RETURNING module_id"""
     }
     modification_domains = {domain_results.domain_features[component.domain] for component in raw_module._modifications}
 
-    previous = None
     for domain in sorted(secmet_module.domains, key=lambda x: x.protein_location.start):
         function = "other"
         for label, component in singles.items():
@@ -762,7 +772,9 @@ RETURNING module_id"""
         else:
             if domain in modification_domains:
                 function = "modification"
-        previous = handle_asdomain(data, domain, module_id, handle_module._domain_function_mapping[function], follows=previous)
+        update_statement = "UPDATE antismash.as_domains SET function_id = %s, module_id = %s WHERE domain_id = %d"
+        function_id = function_ids[function]
+        data.update(update_statement, function_id, module_id, domains_to_id[domain])
 
     if secmet_module.is_complete():
         for substrate, monomer in secmet_module.get_substrate_monomer_pairs():
