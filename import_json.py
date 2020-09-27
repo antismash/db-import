@@ -187,7 +187,7 @@ def get_or_create_dna_sequence(rec, cur, genome_id, record_no):
 def get_or_create_genome(rec, cur, assembly_id):
     """Fetch existing genome entry or create a new one."""
     try:
-        taxid = get_or_create_tax_id(cur, get_taxid(rec), get_strain(rec))
+        taxid = get_or_create_tax_id(cur, get_organism(rec), get_taxid(rec), get_strain(rec))
     except psycopg2.ProgrammingError:
         print(rec)
         raise
@@ -211,6 +211,16 @@ def get_taxid(rec):
         for entry in refs:
             if entry.startswith('taxon:'):
                 return int(entry[6:])
+    return None
+
+
+def get_organism(rec):
+    """Extract the organism from a record."""
+    for feature in rec.get_misc_feature_by_type("source"):
+        organism = feature.get_qualifier("organism")
+        if organism:
+            return organism[0]
+
     return None
 
 
@@ -942,25 +952,25 @@ VALUES (%s, %s)"""
         data.insert(statement, (t2pks_id, product))
 
 
-def get_or_create_tax_id(cur, taxid, strain):
+def get_or_create_tax_id(cur, name, ncbi_taxid, strain):
     """Get the tax_id or create a new one."""
-    if taxid == 0:
-        return 0
-    cur.execute("SELECT tax_id FROM antismash.taxa WHERE tax_id = %s", (taxid, ))
+    cur.execute("SELECT tax_id FROM antismash.taxa WHERE name = %s", (name, ))
     ret = cur.fetchone()
     if ret is None:
-        lineage = get_lineage(taxid)
-        lineage['tax_id'] = taxid
+        lineage = get_lineage(ncbi_taxid)
+        lineage['ncbi_taxid'] = ncbi_taxid
+        lineage['name'] = name
         lineage['strain'] = strain
         try:
             cur.execute("""
-INSERT INTO antismash.taxa (tax_id, superkingdom, phylum, class, taxonomic_order, family, genus, species, strain) VALUES
-    (%(tax_id)s, %(superkingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s, %(strain)s)""",
+INSERT INTO antismash.taxa (ncbi_taxid, superkingdom, kingdom, phylum, class, taxonomic_order, family, genus, species, strain, name) VALUES
+    (%(ncbi_taxid)s, %(superkingdom)s, %(kingdom)s, %(phylum)s, %(class)s, %(order)s, %(family)s, %(genus)s, %(species)s, %(strain)s, %(name)s) RETURNING tax_id""",
                         lineage)
         except KeyError:
             print('Error inserting {!r}'.format(lineage))
             raise
-    return taxid
+        ret = cur.fetchone()
+    return ret
 
 
 def get_lineage(taxid):
