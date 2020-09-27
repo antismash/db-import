@@ -705,15 +705,16 @@ def handle_region_nrpspks(data):
 
     modules = []
     domain_results = data.module_results[antismash.detection.nrps_pks_domains.__name__]
+    domain_results.add_to_record(data.record)
     for cds in data.current_region.cds_children:
-        if not cds.nrps_pks:
+        if cds not in domain_results.cds_results:
             continue
         domains_to_id = {}
         previous = None
         module_id = None
         function = None
-        for domain_name in cds.nrps_pks.domain_names:
-            domain = data.record.get_antismash_domain(domain_name)
+        domains = sorted(domain_results.cds_results[cds].domain_features.values())
+        for domain in domains:
             previous = handle_asdomain(data, domain, module_id, function, follows=previous)
             domains_to_id[domain] = previous
 
@@ -772,9 +773,9 @@ RETURNING module_id"""
         else:
             if domain in modification_domains:
                 function = "modification"
-        update_statement = "UPDATE antismash.as_domains SET function_id = %s, module_id = %s WHERE domain_id = %d"
+        update_statement = "UPDATE antismash.as_domains SET function_id = %s, module_id = %s WHERE as_domain_id = %d"
         function_id = function_ids[function]
-        data.update(update_statement, function_id, module_id, domains_to_id[domain])
+        data.cursor.execute(update_statement % (function_id, module_id, domains_to_id[domain]))
 
     if secmet_module.is_complete():
         for substrate, monomer in secmet_module.get_substrate_monomer_pairs():
