@@ -705,7 +705,6 @@ def handle_region_nrpspks(data):
 
     modules = []
     domain_results = data.module_results[antismash.detection.nrps_pks_domains.__name__]
-    domain_results.add_to_record(data.record)
     for cds in data.current_region.cds_children:
         if cds not in domain_results.cds_results:
             continue
