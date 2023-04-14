@@ -1068,18 +1068,19 @@ if __name__ == "__main__":
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
     total_duration = 0
-    total_imports = 1
+    total_imports = 0
+    successful_imports = 0
     for filename in args.filenames:
-        #print("importing", filename)
         start_time = time.time()
         try:
             main(filename, args.db)
+            successful_imports += 1
         except Exception as err:
-            print(filename, err)
+            print("failed to import", filename, ":", err)
         finally:
             end_time = time.time()
             import_duration = end_time - start_time
             print("took", round(import_duration, 2), "seconds", end="\t")
             total_imports += 1
             total_duration += import_duration
-            print("average:", round(total_duration/total_imports, 2))
+            print("average:", round(total_duration/total_imports, 2), f"for {total_imports} total imports ({successful_imports} successful)")
