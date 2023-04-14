@@ -22,6 +22,7 @@ Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
 
 DEFAULT_AS_OPTIONS = antismash.config.build_config(["--minimal"], modules=antismash.main.get_all_modules())
+DEFAULT_AS_OPTIONS.all_enabled_modules = []
 
 
 class ExistingRecordError(ValueError):
