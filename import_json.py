@@ -88,7 +88,7 @@ def main(filename, db_connection):
                 short_name, _ = os.path.splitext(os.path.basename(filename))
                 id_parts = short_name.split("_")
                 if id_parts[0] not in ("GCF", "GCA"):
-                    raise MissingAssemblyIdError()
+                    raise MissingAssemblyIdError("assembly ID does begin with 'GCF'/'GCA'")
                 assembly_id = "_".join(id_parts[:2])
 
             print("assembly_id:", assembly_id, end="\t")
