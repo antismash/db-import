@@ -3,6 +3,7 @@
 from argparse import ArgumentParser
 from collections import defaultdict
 import hashlib
+import json
 import os
 import sys
 import time
@@ -80,6 +81,8 @@ def main(filename, db_connection):
     connection = psycopg2.connect(db_connection)
     connection.autocommit = False
 
+    with open(filename, encoding="utf-8") as handle:
+        raw_data = json.load(handle)
     results = antismash.common.serialiser.AntismashResults.from_file(filename)
     with connection.cursor() as cursor:
         try:
@@ -103,8 +106,9 @@ def main(filename, db_connection):
                 cursor.execute("INSERT INTO antismash.filenames (assembly_id, base_filename) VALUES (%s, %s)", (assembly_id, input_basename))
             record_no = 0
             for rec, module_results in zip(results.records, results.results):
+                raw_record = raw_data["records"][record_no]
                 record_no += 1
-                prepare_record(rec, module_results)
+                prepare_record(rec, raw_record["areas"], module_results)
                 load_record(rec, module_results, cursor, assembly_id, record_no)
             connection.commit()
             print(assembly_id, "changes committed", end="\t")
@@ -118,12 +122,26 @@ def main(filename, db_connection):
     connection.close()
 
 
-def prepare_record(record, module_results):
+def prepare_record(record, areas, module_results):
+    loc = antismash.common.secmet.locations.FeatureLocation
+    cc = antismash.common.secmet.features.CandidateCluster
     record.strip_antismash_annotations()
-    if antismash.detection.hmm_detection.__name__ not in module_results:
-        return
-    # reannotate in the order that antismash does, for correct regions etc
-    antismash.main.run_detection(record, DEFAULT_AS_OPTIONS, module_results)
+    for raw_region in areas:
+        protoclusters = {}
+        for index, proto in raw_region["protoclusters"].items():
+            full = loc(proto["start"], proto["end"])
+            core = loc(proto["core_start"], proto["core_end"])
+            protoclusters[int(index)] = antismash.common.secmet.Protocluster(core, full, proto["tool"], proto["product"], 0, 0, 0, "")
+        candidates = []
+        for cand in raw_region["candidates"]:
+            cand_pcs = [protoclusters[i] for i in cand["protoclusters"]]
+            candidates.append(cc(kind=cc.kinds.from_string(cand["kind"]), protoclusters=cand_pcs))
+        for p_feature in protoclusters.values():
+            record.add_protocluster(p_feature)
+        for c_feature in candidates:
+            record.add_candidate_cluster(c_feature)
+        # TODO subregions
+        record.add_region(antismash.common.secmet.Region(candidate_clusters=candidates))
 
     def regen(raw, module):
         assert raw
@@ -131,6 +149,10 @@ def prepare_record(record, module_results):
         assert regenerated is not None, "%s results failed to generate for %s" % (module.__name__, record.id)
         regenerated.add_to_record(record)
         return regenerated
+
+    for module in antismash.main.get_detection_modules():
+        if module.__name__ in module_results:
+            module_results[module.__name__] = regen(module_results[module.__name__], module)
 
     for module in antismash.main.get_analysis_modules():
         if module.__name__ in module_results:
