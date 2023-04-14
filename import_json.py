@@ -12,6 +12,8 @@ import urllib
 # pylint: disable=line-too-long,missing-docstring
 
 import antismash
+from antismash.modules.nrps_pks.data_structures import Prediction
+from antismash.modules.nrps_pks.name_mappings import get_substrate_by_name
 from Bio import Entrez
 import psycopg2
 import psycopg2.extensions
@@ -471,7 +473,7 @@ def parse_ripp_core(feature, params):
             params["bridges"] = int(bridges)
 
 
-def handle_asdomain(data, domain, module_id, function_id, follows):
+def handle_asdomain(data, domain, module_id, function_id, predictions: dict[str, Prediction], follows):
     """Handle aSDomain features."""
     params = {}
     params['pks_signature'] = None
@@ -489,7 +491,7 @@ def handle_asdomain(data, domain, module_id, function_id, follows):
     params['locus_tag'] = domain.locus_tag
     params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(domain.locus_tag)]
     params['detection'] = domain.detection
-    params['as_domain_profile_id'] = get_as_domain_profile_id(data.cursor, domain.domain_subtype or domain.domain)
+    params['as_domain_profile_id'] = get_as_domain_profile_id(data.cursor, domain.domain)  # TODO subtypes
     params['function_id'] = function_id
     params['module_id'] = module_id
     params['follows'] = follows
@@ -543,7 +545,8 @@ INSERT INTO antismash.as_domains (
     if params['consensus'] is None:
         return as_domain_id
 
-    for substrate in params['consensus'].split('|'):
+    substrates = params["consensus"].split("|")
+    for substrate in substrates:
         substrate_id = get_substrate(data.cursor, substrate)
         assert substrate_id is not None
         data.insert("INSERT INTO antismash.rel_as_domains_substrates (as_domain_id, substrate_id) VALUES "
@@ -634,7 +637,8 @@ def get_as_domain_profile_id(cur, name):
 
 def get_substrate(cur, name):
     """Get the substrate_id for a substrate by name."""
-    cur.execute("SELECT substrate_id FROM antismash.substrates WHERE name = %s", (name.lower(),))
+    name = get_substrate_by_name(name).short
+    cur.execute("SELECT substrate_id FROM antismash.substrates WHERE name = %s", (name,))
     ret = cur.fetchone()
     if ret is None:
         raise ValueError("missing substrate in substrates table:", name)
@@ -671,10 +675,12 @@ def parse_specificity(feature, params):
             params['minowa'] = pred
         elif method == 'PKS signature':
             params['pks_signature'] = pred
-        elif method == 'consensus':
+        elif method == 'substrate consensus':
             params['consensus'] = pred
+        elif method == "transATor":
+            pass  # covered by generic domain subtype handling, but prevent the fallback error
         else:
-            raise ValueError("unknown method: %s")
+            raise ValueError(f"unknown method: {method}")
 
 
 def handle_region(data, sequence_id, region):
@@ -738,6 +744,9 @@ def handle_region_nrpspks(data):
 
     modules = []
     domain_results = data.module_results[antismash.detection.nrps_pks_domains.__name__]
+    all_nrps_pks_results = data.module_results[antismash.modules.nrps_pks.__name__]
+    domain_predictions = all_nrps_pks_results.domain_predictions
+
     for cds in data.current_region.cds_children:
         if cds not in domain_results.cds_results:
             continue
@@ -747,7 +756,8 @@ def handle_region_nrpspks(data):
         function = None
         domains = sorted(domain_results.cds_results[cds].domain_features.values())
         for domain in domains:
-            previous = handle_asdomain(data, domain, module_id, function, follows=previous)
+            predictions = domain_predictions[domain.domain_id]
+            previous = handle_asdomain(data, domain, module_id, function, predictions, follows=previous)
             domains_to_id[domain] = previous
 
         cds_domain_results = domain_results.cds_results[cds]
