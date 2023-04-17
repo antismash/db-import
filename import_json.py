@@ -17,6 +17,9 @@ from antismash.modules.nrps_pks.name_mappings import get_substrate_by_name
 from Bio import Entrez
 import psycopg2
 import psycopg2.extensions
+
+from dbimporter.common.record_data import RecordData
+
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
@@ -33,42 +36,6 @@ class ExistingRecordError(ValueError):
 
 class MissingAssemblyIdError(ValueError):
     pass
-
-class RecordData:
-    def __init__(self, cursor, record, record_id, assembly_id, module_results, record_no):
-        self.cursor = cursor
-        self.record = record
-        self.record_id = record_id
-        assert record_id
-        self.assembly_id = assembly_id
-        self.module_results = module_results
-        self.record_no = record_no
-
-        self._current_region = None
-        self._current_region_id = None
-        self.feature_mapping = {}
-
-    @property
-    def current_region(self):
-        assert self._current_region
-        return self._current_region
-
-    @current_region.setter
-    def current_region(self, region):
-        assert isinstance(region, antismash.common.secmet.Region)
-        self._current_region = region
-        self._current_region_id = self.feature_mapping[region]
-
-    @property
-    def current_region_id(self):
-        assert self._current_region_id
-        return self._current_region_id
-
-    def insert(self, statement, values):
-        self.cursor.execute(statement, values)
-        if "RETURNING" in statement:
-            return self.cursor.fetchone()[0]
-        return None
 
 
 def get_return_id(cur):
