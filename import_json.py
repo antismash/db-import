@@ -70,8 +70,6 @@ def main(filename, db_connection):
             print("assembly_id:", assembly_id, end="\t")
             if assembly_id:
                 input_basename = os.path.basename(filename)
-                if input_basename.endswith('.final.gbk'):
-                    input_basename = input_basename[:-10]
                 cursor.execute("SELECT (assembly_id) FROM antismash.filenames WHERE base_filename = %s AND assembly_id = %s", (input_basename, assembly_id))
                 if cursor.fetchone() is not None:
                     raise ExistingRecordError()
