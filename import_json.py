@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import traceback
 import urllib
 
 # pylint: disable=line-too-long,missing-docstring
@@ -1072,8 +1073,11 @@ if __name__ == "__main__":
         try:
             main(filename, args.db)
             successful_imports += 1
+        except MissingAssemblyIdError as err:
+            print("failed to import", filename, ":", err)
         except Exception as err:
             print("failed to import", filename, ":", err)
+            traceback.print_exc()
         finally:
             end_time = time.time()
             import_duration = end_time - start_time
