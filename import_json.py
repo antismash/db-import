@@ -19,6 +19,9 @@ import psycopg2
 import psycopg2.extensions
 
 from dbimporter.common.record_data import RecordData
+from dbimporter.modules import (
+    tfbs,
+)
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
@@ -146,6 +149,9 @@ def load_record(rec, module_results, cur, assembly_id, record_no):
         handle_ripps(data)
 
     add_tta_codons(data)
+
+    for module in [tfbs]:
+        module.import_results(data)
 
     for pfam in rec.get_pfam_domains():
         handle_pfamdomain(data, pfam)
