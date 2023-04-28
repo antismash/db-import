@@ -38,6 +38,7 @@ DEFAULT_AS_OPTIONS.all_enabled_modules = []
 class ExistingRecordError(ValueError):
     pass
 
+
 class MissingAssemblyIdError(ValueError):
     pass
 
@@ -1017,38 +1018,39 @@ def test_delete():
             print("no existing genomes")
 
         print("tables with entries remaining:")
-        for table in sorted([
-                "filenames",
-                "t2pks_starter_elongation",
-                "genomes",
-                "t2pks_starters",
-                "t2pks",
-                "t2pks_product_classes",
-                "dna_sequences",
-                "ripps",
-                "t2pks_cds_domain",
-                "monomers",
-                "tta_codons",
-                "rel_modules_monomers",
-                "regions",
-                "module_modifications",
-                "rel_as_domains_substrates",
-                "protoclusters",
-                "rel_regions_types",
-                "candidates",
-                "rel_candidates_protoclusters",
-                "rel_candidates_types",
-                "modules",
-                "rel_candidates_modules",
-                "clusterblast_hits",
-                "profile_hits",
-                "as_domains",
-                "smcog_hits",
-                "cdss",
-                "genes",
-                "pfam_domains",
-                "pfam_go_entries",
-            ]):
+        tables = sorted([
+            "filenames",
+            "t2pks_starter_elongation",
+            "genomes",
+            "t2pks_starters",
+            "t2pks",
+            "t2pks_product_classes",
+            "dna_sequences",
+            "ripps",
+            "t2pks_cds_domain",
+            "monomers",
+            "tta_codons",
+            "rel_modules_monomers",
+            "regions",
+            "module_modifications",
+            "rel_as_domains_substrates",
+            "protoclusters",
+            "rel_regions_types",
+            "candidates",
+            "rel_candidates_protoclusters",
+            "rel_candidates_types",
+            "modules",
+            "rel_candidates_modules",
+            "clusterblast_hits",
+            "profile_hits",
+            "as_domains",
+            "smcog_hits",
+            "cdss",
+            "genes",
+            "pfam_domains",
+            "pfam_go_entries",
+        ])
+        for table in tables:
             cursor.execute("SELECT COUNT(*) FROM antismash.%s" % table)
             count = cursor.fetchone()[0]
             if count > 0:
