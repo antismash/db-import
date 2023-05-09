@@ -44,13 +44,6 @@ class MissingAssemblyIdError(ValueError):
     pass
 
 
-def get_return_id(cur):
-    ret = cur.fetchone()
-    if not ret:
-        raise ValueError("no id to return")
-    return ret[0]
-
-
 def main(filename, db_connection):
     """Run the import."""
     connection = psycopg2.connect(db_connection)
