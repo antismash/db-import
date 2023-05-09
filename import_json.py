@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import a GenBank results file into the antiSMASH database."""
+"""Import an antiSMASH JSON results file into the antiSMASH database."""
 from argparse import ArgumentParser
 from collections import defaultdict
 import hashlib
