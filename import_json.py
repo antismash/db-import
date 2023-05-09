@@ -20,6 +20,10 @@ import psycopg2
 import psycopg2.extensions
 
 from dbimporter.common.record_data import RecordData
+from dbimporter.common import (
+    getters,
+    preparation,
+)
 from dbimporter.modules import (
     clusterblast,
     tfbs,
@@ -31,9 +35,6 @@ psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
-
-DEFAULT_AS_OPTIONS = antismash.config.build_config(["--minimal"], modules=antismash.main.get_all_modules())
-DEFAULT_AS_OPTIONS.all_enabled_modules = []
 
 
 class ExistingRecordError(ValueError):
@@ -54,7 +55,7 @@ def main(filename, db_connection):
     results = antismash.common.serialiser.AntismashResults.from_file(filename)
     with connection.cursor() as cursor:
         try:
-            assembly_id = get_assembly_id(results.records[0])
+            assembly_id = getters.get_assembly_id(results.records[0])
             if not assembly_id:
                 short_name, _ = os.path.splitext(os.path.basename(filename))
                 id_parts = short_name.split("_")
@@ -73,7 +74,7 @@ def main(filename, db_connection):
             for rec, module_results in zip(results.records, results.results):
                 raw_record = raw_data["records"][record_no]
                 record_no += 1
-                prepare_record(rec, raw_record["areas"], module_results)
+                preparation.prepare_record(rec, raw_record["areas"], module_results)
                 load_record(rec, module_results, cursor, assembly_id, record_no)
             connection.commit()
             print(assembly_id, "changes committed", end="\t")
@@ -83,46 +84,6 @@ def main(filename, db_connection):
             connection.rollback()
             raise
     connection.close()
-
-
-def prepare_record(record, areas, module_results):
-    loc = antismash.common.secmet.locations.FeatureLocation
-    cc = antismash.common.secmet.features.CandidateCluster
-    record.strip_antismash_annotations()
-    for raw_region in areas:
-        protoclusters = {}
-        for index, proto in raw_region["protoclusters"].items():
-            full = loc(proto["start"], proto["end"])
-            core = loc(proto["core_start"], proto["core_end"])
-            protoclusters[int(index)] = antismash.common.secmet.Protocluster(core, full, proto["tool"], proto["product"], 0, 0, 0, "")
-        candidates = []
-        for cand in raw_region["candidates"]:
-            cand_pcs = [protoclusters[i] for i in cand["protoclusters"]]
-            candidates.append(cc(kind=cc.kinds.from_string(cand["kind"]), protoclusters=cand_pcs))
-        for p_feature in protoclusters.values():
-            record.add_protocluster(p_feature)
-        for c_feature in candidates:
-            record.add_candidate_cluster(c_feature)
-        # TODO subregions
-        record.add_region(antismash.common.secmet.Region(candidate_clusters=candidates))
-
-    def regen(raw, module):
-        assert raw
-        regenerated = module.regenerate_previous_results(raw, record, DEFAULT_AS_OPTIONS)
-        assert regenerated is not None, "%s results failed to generate for %s" % (module.__name__, record.id)
-        regenerated.add_to_record(record)
-        return regenerated
-
-    for module in antismash.main.get_detection_modules():
-        if module.__name__ in module_results:
-            module_results[module.__name__] = regen(module_results[module.__name__], module)
-
-    for module in antismash.main.get_analysis_modules():
-        if module.__name__ in module_results:
-            module_results[module.__name__] = regen(module_results[module.__name__], module)
-
-    for val in module_results.values():
-        assert not isinstance(val, dict)
 
 
 def load_record(rec, module_results, cur, assembly_id, record_no):
@@ -220,16 +181,6 @@ def get_strain(rec):
         serovar = feature.get_qualifier("serovar")
         if serovar:
             return serovar[0]
-
-    return None
-
-
-def get_assembly_id(rec):
-    """Extract the NCBI assembly ID from a record."""
-    for ref in rec.dbxrefs:
-        if not ref.startswith('Assembly:'):
-            continue
-        return ref[9:]
 
     return None
 
