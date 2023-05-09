@@ -8,9 +8,9 @@ touch imported.txt
 
 readonly SEQDIR=$1
 
-for infile in $(find ${SEQDIR} -name "*.final.gbk"); do
+for infile in $(find ${SEQDIR} -name "*.json"); do
     grep -q ${infile} imported.txt && echo "Skipping ${infile}" && continue
     echo ${infile}
-    ./import_genbank.py ${infile}
+    ./import_json.py ${infile}
     echo ${infile} >> imported.txt
 done
