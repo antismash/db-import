@@ -21,6 +21,7 @@ import psycopg2.extensions
 
 from dbimporter.common.record_data import RecordData
 from dbimporter.modules import (
+    clusterblast,
     tfbs,
 )
 
@@ -685,15 +686,7 @@ RETURNING region_id""", params)
             handle_t2pks(data, protocluster)
     link_proto_to_candidates(data)
 
-    clusterblast_results = data.module_results.get(antismash.modules.clusterblast.__name__)
-
-    if clusterblast_results:
-        if clusterblast_results.general:
-            store_clusterblast(data, clusterblast_results.general.region_results[region.get_region_number()-1], 'clusterblast')
-        if clusterblast_results.knowncluster:
-            store_clusterblast(data, clusterblast_results.knowncluster.region_results[region.get_region_number()-1], 'knownclusterblast')
-        if clusterblast_results.subcluster:
-            store_clusterblast(data, clusterblast_results.subcluster.region_results[region.get_region_number()-1], 'subclusterblast')
+    clusterblast.import_region_results(data, region)
 
     handle_region_nrpspks(data)
 
@@ -844,33 +837,6 @@ def link_proto_to_candidates(data):
             data.insert("""
 INSERT INTO antismash.rel_candidates_protoclusters (candidate_id, protocluster_id)
 VALUES (%s, %s)""", (cand_id, proto_id))
-
-
-def store_clusterblast(data, results, algorithm):
-    """Store XClusterBlast results in the database."""
-    data.cursor.execute("SELECT algorithm_id FROM antismash.clusterblast_algorithms WHERE name = %s", (algorithm, ))
-    ret = data.cursor.fetchone()
-    if ret is None:
-        raise ValueError('Did not find algorithm_id for {!r}!'.format(algorithm))
-    algorithm_id = ret[0]
-
-    assert isinstance(results, antismash.modules.clusterblast.results.RegionResult), type(results)
-    # limit to the number of drawn hits, normally set with DEFAULT_AS_OPTIONS.cb_nclusters
-    for i, hit in enumerate(results.ranking[:len(results.svg_builder.hits)]):
-        ref_cluster, _ = hit
-        params = {
-            "algorithm_id": algorithm_id,
-            "region_id": data.current_region_id,
-            "rank": i + 1,
-            "acc": ref_cluster.accession + (("_" + ref_cluster.cluster_label) if algorithm != "knownclusterblast" else ""),
-            "description": ref_cluster.description,
-            "similarity": results.svg_builder.hits[i].similarity,
-        }
-        data.insert("""
-INSERT INTO antismash.clusterblast_hits (rank, region_id, acc, description, similarity, algorithm_id)
-VALUES (%(rank)s, %(region_id)s, %(acc)s, %(description)s, %(similarity)s, %(algorithm_id)s)
-RETURNING clusterblast_hit_id
-    """, params)
 
 
 def nx_create_rel_regions_types(cur, params, product):
