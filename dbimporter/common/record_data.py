@@ -36,7 +36,14 @@ class RecordData:
         return self._current_region_id
 
     def insert(self, statement, values):
-        self.cursor.execute(statement, values)
+        try:
+            self.cursor.execute(statement, values)
+        except:
+            print("failed insertion:")
+            print("  statement:")
+            print("   ", "\n    ".join(statement.strip().splitlines()))
+            print("  values:", values)
+            raise
         if "RETURNING" in statement:
             return self.cursor.fetchone()[0]
         return None
