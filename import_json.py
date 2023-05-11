@@ -1065,6 +1065,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     total_duration = 0
     total_imports = 0
+    failed = False
     successful_imports = 0
     for filename in args.filenames:
         start_time = time.time()
@@ -1073,9 +1074,11 @@ if __name__ == "__main__":
             successful_imports += 1
         except MissingAssemblyIdError as err:
             print("failed to import", filename, ":", err)
+            failed = True
         except Exception as err:
             print("failed to import", filename, ":", err)
             traceback.print_exc()
+            failed = True
         finally:
             end_time = time.time()
             import_duration = end_time - start_time
@@ -1083,3 +1086,4 @@ if __name__ == "__main__":
             total_imports += 1
             total_duration += import_duration
             print("average:", round(total_duration/total_imports, 2), f"for {total_imports} total imports ({successful_imports} successful)")
+    sys.exit(1 if failed else 0)
