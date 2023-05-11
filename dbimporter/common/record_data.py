@@ -28,6 +28,12 @@ class RecordData:
     def current_region(self, region):
         assert isinstance(region, Region)
         self._current_region = region
+        if region not in self.feature_mapping:
+            self.cursor.execute("SELECT region_id FROM antismash.regions WHERE accession = %s and region_number = %s",
+                                (self.record_id, region.get_region_number()))
+            ret = self.cursor.fetchone()
+            assert ret
+            self.feature_mapping[region] = ret[0]
         self._current_region_id = self.feature_mapping[region]
 
     @property
