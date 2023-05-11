@@ -592,6 +592,9 @@ def parse_specificity(feature, params):
     """Parse the feature's specificity entries."""
     for prediction in feature.specificity:
         method, pred = prediction.split(": ", 1)
+        # drop any prediction which has no actual result
+        if pred == antismash.modules.nrps_pks.results.UNKNOWN:
+            continue
         if method == 'KR activity':
             params['kr_activity'] = not pred.endswith('inactive')
         elif method == 'KR stereochemistry':
