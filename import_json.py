@@ -384,6 +384,21 @@ def parse_ripp_core(feature, params):
             params["bridges"] = int(bridges)
 
 
+def handle_as_domain_subtype(data, as_domain_id: int, subtype: str) -> None:
+    """ Link domains to their subtypes """
+    assert as_domain_id
+    assert subtype
+
+    # ensure the subtype is present in the subtype table
+    data.cursor.execute("SELECT subtype FROM antismash.as_domain_subtypes WHERE subtype = %s", (subtype,))
+    if not data.cursor.fetchone():
+        print("inserting new aSDomain subtype:", subtype)
+        data.insert("INSERT INTO antismash.as_domain_subtypes (subtype, description) VALUES "
+                    "(%s, %s)", (subtype, ""))  # TODO add meaningful descriptions or just build this up as a static thing
+    data.insert("INSERT INTO antismash.rel_as_domain_to_subtype (as_domain_id, subtype) VALUES (%s, %s)",
+                (as_domain_id, subtype))
+
+
 def handle_asdomain(data, domain, module_id, function_id, predictions: dict[str, Prediction], follows):
     """Handle aSDomain features."""
     params = {}
@@ -402,7 +417,7 @@ def handle_asdomain(data, domain, module_id, function_id, predictions: dict[str,
     params['locus_tag'] = domain.locus_tag
     params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(domain.locus_tag)]
     params['detection'] = domain.detection
-    params['as_domain_profile_id'] = get_as_domain_profile_id(data.cursor, domain.domain)  # TODO subtypes
+    params['as_domain_profile_id'] = get_as_domain_profile_id(data.cursor, domain.domain)
     params['function_id'] = function_id
     params['module_id'] = module_id
     params['follows'] = follows
@@ -452,6 +467,10 @@ INSERT INTO antismash.as_domains (
         print("error fetching cds_id for locus_tag", params['locus_tag'])
         raise
     data.feature_mapping[domain] = as_domain_id
+
+    for subtype in domain.subtypes:
+        handle_as_domain_subtype(data, as_domain_id, subtype)
+
     if params['consensus'] is None:
         return as_domain_id
 
