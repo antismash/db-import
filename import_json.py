@@ -671,10 +671,11 @@ def handle_region_nrpspks(data):
     all_nrps_pks_results = data.module_results[antismash.modules.nrps_pks.__name__]
     domain_predictions = all_nrps_pks_results.domain_predictions
 
+    # handle all domains first, as modules will refer to them
+    domains_to_id = {}
     for cds in data.current_region.cds_children:
         if cds not in domain_results.cds_results:
             continue
-        domains_to_id = {}
         previous = None
         module_id = None
         function = None
@@ -684,11 +685,15 @@ def handle_region_nrpspks(data):
             previous = handle_asdomain(data, domain, module_id, function, predictions, follows=previous)
             domains_to_id[domain] = previous
 
+    # then do a second pass, now that cross-CDS modules won't attempt to refer
+    # to domains that are not yet processed
+    for cds in data.current_region.cds_children:
+        if not cds.modules:
+            continue
         cds_domain_results = domain_results.cds_results[cds]
         for module, raw_module in zip(cds.modules, cds_domain_results.modules):
             modules.append(module)
-            assert not module.is_multigene_module()  # this will have to be handled when these are detected
-            handle_module(data, raw_module, cds_domain_results, module, domains_to_id, function_ids)
+            handle_module(data, raw_module, cds_domain_results, module, domains_to_id, function_ids, cds.get_name())
 
     if not modules:
         return
@@ -704,10 +709,10 @@ def handle_region_nrpspks(data):
                             (data.feature_mapping[candidate], data.feature_mapping[module]))
 
 
-def handle_module(data, raw_module, domain_results, secmet_module, domains_to_id, function_ids):
+def handle_module(data, raw_module, domain_results, secmet_module, domains_to_id, function_ids, cds_name):
     statement = """
-INSERT INTO antismash.modules (location, type, complete, iterative, region_id, trans_at)
-VALUES (%(location)s, %(type)s, %(complete)s, %(iterative)s, %(region_id)s, %(trans_at)s)
+INSERT INTO antismash.modules (location, type, complete, iterative, region_id, trans_at, multi_gene)
+VALUES (%(location)s, %(type)s, %(complete)s, %(iterative)s, %(region_id)s, %(trans_at)s, %(multi_gene)s)
 RETURNING module_id"""
     assert raw_module.is_trans_at() in [True, False]
     values = {
@@ -717,6 +722,7 @@ RETURNING module_id"""
         "iterative": secmet_module.is_iterative(),
         "region_id": data.current_region_id,
         "trans_at": raw_module.is_trans_at(),
+        "multi_gene": secmet_module.is_multigene_module(),
     }
 
     module_id = data.insert(statement, values)
@@ -728,22 +734,25 @@ RETURNING module_id"""
         "carrier_protein": raw_module._carrier_protein,
         "finalisation": raw_module._end,
     }
-    modification_domains = {domain_results.domain_features[component.domain] for component in raw_module._modifications}
-
-    for domain in sorted(secmet_module.domains, key=lambda x: x.protein_location.start):
+    modification_components = {component.label for component in raw_module.components if component.is_modification()}
+    assert len(secmet_module.domains) == len(raw_module.components)
+    for domain, component in zip(secmet_module.domains, raw_module.components):
+        domain_id = domains_to_id[domain]
         function = "other"
-        for label, component in singles.items():
-            if component and domain is domain_results.domain_features[component.domain]:
+        for label, single in singles.items():
+            if single and domain is domain_results.domain_features.get(single.domain):
                 function = label
                 break
         else:
-            if domain in modification_domains:
+            if component.is_modification():
                 function = "modification"
         update_statement = "UPDATE antismash.as_domains SET function_id = %s, module_id = %s WHERE as_domain_id = %d"
         function_id = function_ids[function]
-        data.cursor.execute(update_statement % (function_id, module_id, domains_to_id[domain]))
+        data.cursor.execute(update_statement % (function_id, module_id, domain_id))
 
-    if secmet_module.is_complete():
+    # don't insert the module if the current CDS is not the first CDS of a multi-CDS module,
+    # otherwise it'll duplicate
+    if secmet_module.is_complete() and cds_name == secmet_module.parent_cds_names[0]:
         for substrate, monomer in secmet_module.get_substrate_monomer_pairs():
             substrate_id = get_substrate(data.cursor, substrate)
             modified = substrate != monomer
