@@ -36,6 +36,9 @@ DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' db
 Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
 
+RIPP_PRODUCTS = set(antismash.detection.hmm_detection.get_supported_cluster_types("loose", category="RiPP"))
+assert RIPP_PRODUCTS
+
 
 class ExistingRecordError(ValueError):
     pass
@@ -323,7 +326,7 @@ def get_smcog_id(cur, smcog):
 def handle_ripps(data):
     """Handle RiPP predictions."""
     for protocluster in data.current_region.get_unique_protoclusters():
-        if not protocluster.product.endswith("peptide"):
+        if protocluster.product not in RIPP_PRODUCTS:
             continue
         for motif in data.record.get_cds_motifs():
             if motif.overlaps_with(protocluster) and isinstance(motif, antismash.common.secmet.Prepeptide):
@@ -332,10 +335,15 @@ def handle_ripps(data):
 
 def handle_ripp(data, protocluster, motif):
     """Handle a single RiPP prediction."""
+    locus_tag = motif.locus_tag
+    # since the motifs append which module created them so as to have unique locus tags...
+    assert locus_tag.endswith("peptide"), locus_tag
+    locus_tag = locus_tag.rsplit("_", 1)[0]
+
     params = defaultdict(lambda: None)
     params['protocluster_id'] = data.feature_mapping[protocluster]
-    params['locus_tag'] = motif.locus_tag
-    params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(motif.locus_tag)]
+    params['locus_tag'] = locus_tag
+    params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(locus_tag)]
     parse_ripp_core(motif, params)
     if params['peptide_sequence'] is None:
         return
