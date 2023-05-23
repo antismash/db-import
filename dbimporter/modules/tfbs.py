@@ -34,7 +34,9 @@ def get_confidence_id(cursor, name):
 
 
 def import_results(data: RecordData) -> None:
-    results = data.module_results[tfbs_finder.__name__]
+    results = data.module_results.get(tfbs_finder.__name__)
+    if not results:
+        return
     assert isinstance(results, tfbs_finder.TFBSFinderResults)
     for region in data.record.get_regions():
         hits = results.get_hits_by_region(region.get_region_number())
