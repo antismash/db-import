@@ -27,6 +27,7 @@ from dbimporter.common import (
 from dbimporter.modules import (
     clusterblast,
     tfbs,
+    pfams,
 )
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
@@ -108,11 +109,9 @@ def load_record(rec, module_results, cur, assembly_id, record_no):
 
     add_tta_codons(data)
 
-    for module in [tfbs]:
+    for module in [pfams, tfbs]:
         module.import_results(data)
 
-    for pfam in rec.get_pfam_domains():
-        handle_pfamdomain(data, pfam)
     for gene in rec.get_genes():
         handle_gene(data, gene)
 
@@ -489,74 +488,6 @@ INSERT INTO antismash.as_domains (
         data.insert("INSERT INTO antismash.rel_as_domains_substrates (as_domain_id, substrate_id) VALUES "
                     "(%s, %s)", (as_domain_id, substrate_id))
     return as_domain_id
-
-
-def get_go_id(cursor, go_identifier):
-    cursor.execute("SELECT go_id FROM antismash.gene_ontologies WHERE identifier = %s", (go_identifier,))
-    ret = cursor.fetchone()
-    if ret is None:
-        raise ValueError("unknown GO identifier %s" % go_identifier)
-    return ret[0]
-
-
-def handle_pfamdomain(data, feature):
-    """Handle PFAM_domain features."""
-    params = {}
-
-    params['location'] = str(feature.location)
-
-    params['score'] = feature.score
-    params['evalue'] = feature.evalue
-    params['translation'] = feature.translation
-    params['locus_tag'] = feature.locus_tag
-    params['detection'] = feature.detection
-    params['database'] = feature.database
-    params['pfam_id'] = get_pfam_id(data.cursor, feature.identifier)
-    params['location'] = str(feature.location)
-    params['cds_id'] = data.feature_mapping[data.record.get_cds_by_name(feature.locus_tag)]
-
-    pfam_id = data.insert("""
-INSERT INTO antismash.pfam_domains (
-    database,
-    detection,
-    score,
-    evalue,
-    translation,
-    pfam_id,
-    location,
-    cds_id
-) VALUES (
-    %(database)s,
-    %(detection)s,
-    %(score)s,
-    %(evalue)s,
-    %(translation)s,
-    %(pfam_id)s,
-    %(location)s,
-    %(cds_id)s
-)
-RETURNING pfam_domain_id""", params)
-
-    if not feature.gene_ontologies:
-        return
-
-    statement = """
-INSERT INTO antismash.pfam_go_entries (pfam_domain_id, go_id)
-VALUES (%s, %s)"""
-    for go_identifier in feature.gene_ontologies.ids:
-        go_id = get_go_id(data.cursor, go_identifier)
-        data.insert(statement, (pfam_id, go_id))
-
-
-def get_pfam_id(cur, identifier):
-    """Get the pfam_id for a domain by db_xref string."""
-    assert identifier
-    cur.execute("SELECT pfam_id FROM antismash.pfams WHERE pfam_id = %s", (identifier,))
-    ret = cur.fetchone()
-    if ret is None:
-        raise ValueError("Invalid pfam_id {!r}".format(identifier))
-
-    return ret[0]
 
 
 def get_as_domain_profile_id(cur, name):
