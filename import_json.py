@@ -28,6 +28,7 @@ from dbimporter.modules import (
     clusterblast,
     tfbs,
     pfams,
+    tigrfams,
 )
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
@@ -109,7 +110,7 @@ def load_record(rec, module_results, cur, assembly_id, record_no):
 
     add_tta_codons(data)
 
-    for module in [pfams, tfbs]:
+    for module in [pfams, tfbs, tigrfams]:
         module.import_results(data)
 
     for gene in rec.get_genes():
