@@ -41,6 +41,8 @@ REPORTED_TYPES = set()
 RIPP_PRODUCTS = set(antismash.detection.hmm_detection.get_supported_cluster_types("loose", category="RiPP"))
 assert RIPP_PRODUCTS
 
+CANDIDATE_KINDS: dict[str, int] = {}
+
 
 class ExistingRecordError(ValueError):
     pass
@@ -722,11 +724,23 @@ def handle_candidate(data, candidate):
                 polymer = cand_result.polymer
                 break
 
+    if candidate.kind not in CANDIDATE_KINDS:
+        data.cursor.execute(
+            "SELECT candidate_type_id FROM antismash.candidate_types WHERE description = %s",
+            (str(candidate.kind).replace("_", " "),)
+        )
+        kind_id = data.cursor.fetchone()
+        assert kind_id is not None
+        CANDIDATE_KINDS[candidate.kind] = kind_id
+    else:
+        kind_id = CANDIDATE_KINDS[candidate.kind]
     candidate_id = data.insert("""
-INSERT INTO antismash.candidates (region_id, location, smiles, polymer)
-VALUES (%s, %s, %s, %s)
+INSERT INTO antismash.candidates (region_id, location, candidate_type_id, smiles, polymer)
+VALUES (%s, %s, %s, %s, %s)
 RETURNING candidate_id""",
-                               (data.current_region_id, str(candidate.location), candidate.smiles_structure, polymer))
+                               (data.current_region_id, str(candidate.location),
+                               kind_id,
+                               candidate.smiles_structure, polymer))
     data.feature_mapping[candidate] = candidate_id
 
     for product in candidate.products:
