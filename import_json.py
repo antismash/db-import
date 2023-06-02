@@ -621,7 +621,7 @@ def handle_region_nrpspks(data):
         previous = None
         module_id = None
         function = None
-        domains = sorted(domain_results.cds_results[cds].domain_features.values())
+        domains = sorted(domain_results.cds_results[cds].domain_features.values(), reverse=cds.location.strand == -1)
         for domain in domains:
             predictions = domain_predictions[domain.domain_id]
             previous = handle_asdomain(data, domain, module_id, function, predictions, follows=previous)
