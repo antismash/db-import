@@ -846,12 +846,13 @@ VALUES (%s, %s)"""
 
 def get_or_create_tax_id(cur, name, ncbi_taxid, strain):
     """Get the tax_id or create a new one."""
-    cur.execute("SELECT tax_id FROM antismash.taxa WHERE name = %s", (name, ))
+    combined_name = f"{name} {strain}"
+    cur.execute("SELECT tax_id FROM antismash.taxa WHERE name = %s", (combined_name, ))
     ret = cur.fetchone()
     if ret is None:
         lineage = get_lineage(ncbi_taxid)
         lineage['ncbi_taxid'] = ncbi_taxid
-        lineage['name'] = name
+        lineage['name'] = combined_name
         lineage['strain'] = strain
         try:
             cur.execute("""
