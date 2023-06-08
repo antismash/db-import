@@ -507,9 +507,18 @@ def get_as_domain_profile_id(cur, name):
     return ret[0]
 
 
+# TODO: Remove this once antiSMASH reports the right substrate names for PKSes
+SUBSTRATE_TRANSLATIONS = {
+    "ccmmal": "me-ccmal",
+    "mmal": "me-mal",
+    "ohmmal": "me-ohmal",
+    "redmmal": "me-redmal",
+}
+
+
 def get_substrate(cur, name):
     """Get the substrate_id for a substrate by name."""
-    name = get_substrate_by_name(name).short
+    name = get_substrate_by_name(SUBSTRATE_TRANSLATIONS.get(name, name)).short
     cur.execute("SELECT substrate_id FROM antismash.substrates WHERE name = %s", (name,))
     ret = cur.fetchone()
     if ret is None:
