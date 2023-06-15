@@ -25,6 +25,7 @@ from dbimporter.common import (
     preparation,
 )
 from dbimporter.modules import (
+    cluster_compare,
     clusterblast,
     tfbs,
     pfams,
@@ -112,7 +113,7 @@ def load_record(rec, module_results, cur, assembly_id, record_no):
 
     add_tta_codons(data)
 
-    for module in [pfams, tfbs, tigrfams]:
+    for module in [cluster_compare, pfams, tfbs, tigrfams]:
         module.import_results(data)
 
     for gene in rec.get_genes():
