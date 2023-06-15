@@ -707,8 +707,6 @@ VALUES (%s, %s, %s)"""
 
 
 def get_product_id(cur, product):
-    if product.lower() == "nrps":
-        product = "t1nrps"
     cur.execute("SELECT bgc_type_id FROM antismash.bgc_types WHERE term = %s", (product.lower(),))
     ret = cur.fetchone()
     if ret is None:
