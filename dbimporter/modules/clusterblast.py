@@ -9,6 +9,19 @@ from antismash.modules import clusterblast
 from dbimporter.common import RecordData
 
 
+def _get_reference_region_id(cursor, accession: str, cluster_label: str) -> int:
+    try:
+        start, end = map(int, cluster_label.lstrip("c").split("-"))
+    except ValueError:
+        raise ValueError(f"Invalid reference region label: {cluster_label}")
+    cursor.execute("SELECT region_id FROM antismash.regions WHERE accession = %s AND start_pos = %s AND end_pos = %s",
+                   (accession, start, end))
+    ret = cursor.fetchone()
+    if ret is None:
+        raise ValueError(f"No existing region matches clusterblast reference '{accession} {cluster_label}'")
+    return ret[0]
+
+
 def store_clusterblast(data: RecordData, results, algorithm):
     """Store XClusterBlast results in the database."""
     data.cursor.execute("SELECT algorithm_id FROM antismash.clusterblast_algorithms WHERE name = %s", (algorithm, ))
@@ -35,6 +48,9 @@ def store_clusterblast(data: RecordData, results, algorithm):
             "description": ref_cluster.description,
             "similarity": results.svg_builder.hits[i].similarity,
         }
+        if algorithm == "clusterblast":
+            ref_id = _get_reference_region_id(data.cursor, ref_cluster.accession, ref_cluster.cluster_label)
+            assert ref_id  # otherwise the region referred to doesn't exist
         data.insert("""
 INSERT INTO antismash.clusterblast_hits (rank, region_id, acc, description, similarity, algorithm_id)
 VALUES (%(rank)s, %(region_id)s, %(acc)s, %(description)s, %(similarity)s, %(algorithm_id)s)
