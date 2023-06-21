@@ -17,10 +17,16 @@ def store_clusterblast(data: RecordData, results, algorithm):
         raise ValueError('Did not find algorithm_id for {!r}!'.format(algorithm))
     algorithm_id = ret[0]
 
+    region = data.current_region
+    region_string = f"c{int(region.location.start)}-{int(region.location.end)}"
+
     assert isinstance(results, clusterblast.results.RegionResult), type(results)
     # limit to the number of drawn hits, normally set with DEFAULT_AS_OPTIONS.cb_nclusters
     for i, hit in enumerate(results.ranking[:len(results.svg_builder.hits)]):
         ref_cluster, _ = hit
+        # skip hits that refer back to this specific region, but allow other hits to this record
+        if ref_cluster.accession == data.record.id and ref_cluster.cluster_label == region_string:
+            continue
         params = {
             "algorithm_id": algorithm_id,
             "region_id": data.current_region_id,
