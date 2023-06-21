@@ -595,7 +595,7 @@ RETURNING region_id""", params)
             handle_t2pks(data, protocluster)
     link_proto_to_candidates(data)
 
-    clusterblast.import_region_results(data, region)
+    clusterblast.import_region_results(data, region, deferred=False)
 
     handle_region_nrpspks(data)
 

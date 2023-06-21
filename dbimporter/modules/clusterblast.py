@@ -36,7 +36,7 @@ RETURNING clusterblast_hit_id
     """, params)
 
 
-def import_region_results(data: RecordData, region: Region) -> None:
+def import_region_results(data: RecordData, region: Region, deferred: bool = False) -> None:
     clusterblast_results = data.module_results.get(clusterblast.__name__)
 
     if not clusterblast_results:
@@ -45,9 +45,11 @@ def import_region_results(data: RecordData, region: Region) -> None:
     assert data.current_region == region
 
     region_index = region.get_region_number() - 1  # 1-indexed to 0-indexed for a list
-    if clusterblast_results.general:
-        store_clusterblast(data, clusterblast_results.general.region_results[region_index], 'clusterblast')
-    if clusterblast_results.knowncluster:
-        store_clusterblast(data, clusterblast_results.knowncluster.region_results[region_index], 'knownclusterblast')
-    if clusterblast_results.subcluster:
-        store_clusterblast(data, clusterblast_results.subcluster.region_results[region_index], 'subclusterblast')
+    if deferred:
+        if clusterblast_results.general:
+            store_clusterblast(data, clusterblast_results.general.region_results[region_index], 'clusterblast')
+    else:
+        if clusterblast_results.knowncluster:
+            store_clusterblast(data, clusterblast_results.knowncluster.region_results[region_index], 'knownclusterblast')
+        if clusterblast_results.subcluster:
+            store_clusterblast(data, clusterblast_results.subcluster.region_results[region_index], 'subclusterblast')

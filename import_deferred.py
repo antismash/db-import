@@ -103,7 +103,7 @@ def handle_region(data: RecordData, sequence_id, region):
     assert region
     data.current_region = region
 
-    clusterblast.import_region_results(data, region)
+    clusterblast.import_region_results(data, region, deferred=True)
 
 
 if __name__ == "__main__":
