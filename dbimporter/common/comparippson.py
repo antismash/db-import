@@ -17,7 +17,7 @@ _RIPP_MODULES = (
     antismash.modules.sactipeptides,
     antismash.modules.thiopeptides,
 )
-ASDB_SIMILARITY_THRESHOLD = 0.2
+ASDB_SIMILARITY_THRESHOLD = 1.2
 MIBIG_SIMILARITY_THRESHOLD = 0.2
 
 
