@@ -13,12 +13,13 @@ rm -f $ERROR_FILE
 
 IMPORTDIR=`dirname "$0"`
 readonly SEQDIR=$1
+readonly TAXONOMY=$2
 
 echo "Importing base results"
 for infile in $(find ${SEQDIR} -name "*.json"); do
     grep -q ${infile} imported.txt && echo "Skipping ${infile}" && continue
     echo "importing ${infile}"
-    if $IMPORTDIR/import_json.py ${infile}; then
+    if $IMPORTDIR/import_json.py --taxonomy ${TAXONOMY} ${infile}; then
         echo ${infile} >> imported.txt
     else
         echo ${infile} >> $ERROR_FILE

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Import an antiSMASH JSON results file into the antiSMASH database."""
-from argparse import ArgumentParser
+from argparse import ArgumentParser, FileType
 from collections import defaultdict
 import hashlib
 import json
@@ -847,7 +847,7 @@ VALUES (%s, %s)"""
 def get_or_create_tax_id(cur, name, ncbi_taxid, strain):
     """Get the tax_id or create a new one."""
     combined_name = f"{name} {strain}"
-    cur.execute("SELECT tax_id FROM antismash.taxa WHERE name = %s", (combined_name, ))
+    cur.execute("SELECT tax_id FROM antismash.taxa WHERE name = %s AND ncbi_taxid = %s", (combined_name, ncbi_taxid))
     ret = cur.fetchone()
     if ret is None:
         lineage = get_lineage(ncbi_taxid)
@@ -868,6 +868,12 @@ INSERT INTO antismash.taxa (ncbi_taxid, superkingdom, kingdom, phylum, class, ta
 
 def get_lineage(taxid):
     """Get the full lineage for a taxid from Entrez."""
+    info = TAX_DUMP["mappings"].get(str(TAX_DUMP["deprecated_ids"].get(str(taxid), taxid)))
+    if info:
+        result = dict(info)
+        result.pop("tax_id")
+        return result
+
     api_key = os.environ.get('ASDBI_ENTREZ_API_KEY', '')
     extra_params = {}
     if api_key:
@@ -958,8 +964,12 @@ def test_delete():
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--db', default=DB_CONNECTION, help="DB connection string to use (default: %(default)s)")
+    parser.add_argument('--taxonomy', type=FileType("r"), help="Taxonomy dump as JSON")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
+
+    TAX_DUMP = json.load(args.taxonomy)
+
     total_duration = 0
     total_imports = 0
     failed = False
