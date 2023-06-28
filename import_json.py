@@ -975,6 +975,10 @@ if __name__ == "__main__":
     parser.add_argument('--db', default=DB_CONNECTION, help="DB connection string to use (default: %(default)s)")
     parser.add_argument('--taxonomy', type=FileType("r"), help="Taxonomy dump as JSON")
     parser.add_argument('--from-filelist', action="store_true", default=False, help="Passed filename is a list of filenames")
+    parser.add_argument('--success-log', type=FileType("a", encoding="utf-8"), default=None,
+                        help="File to store successfully imported file names in")
+    parser.add_argument('--error-log', type=FileType('a', encoding="utf-8"), default=None,
+                        help="File to store file names that failed to import in")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
 
@@ -998,13 +1002,19 @@ if __name__ == "__main__":
         try:
             main(filename, args.db)
             successful_imports += 1
+            if args.success_log:
+                print(filename, file=args.success_log)
         except MissingAssemblyIdError as err:
             print("failed to import", filename, ":", err)
             failed = True
+            if args.error_log:
+                print(filename, file=args.error_log)
         except Exception as err:
             print("failed to import", filename, ":", err)
             traceback.print_exc()
             failed = True
+            if args.error_log:
+                print(filename, file=args.error_log)
         finally:
             end_time = time.time()
             import_duration = end_time - start_time
