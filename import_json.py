@@ -989,7 +989,7 @@ if __name__ == "__main__":
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
 
-    TAX_DUMP = json.load(args.taxonomy)
+    TAX_DUMP = json.load(args.taxonomy) if args.taxonomy else {"mappings":{}, "deprecated_ids":{}}
 
     total_duration = 0
     total_imports = 0
