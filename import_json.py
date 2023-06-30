@@ -643,7 +643,14 @@ def handle_region_nrpspks(data):
         if not cds.modules:
             continue
         cds_domain_results = domain_results.cds_results[cds]
-        for module, raw_module in zip(cds.modules, cds_domain_results.modules):
+        cds_modules = cds.modules
+        # if the first or last module is a cross-CDS module, don't reprocess it
+        if cds_modules[0].is_multigene_module() and cds.get_name() != cds_modules[0].parent_cds_names[0]:
+            cds_modules = cds_modules[1:]
+        if cds_modules and cds_modules[-1].is_multigene_module() and cds.get_name() != cds_modules[-1].parent_cds_names[0]:
+            cds_modules = cds_modules[:-1]
+        assert len(cds_modules) == len(cds_domain_results.modules)
+        for module, raw_module in zip(cds_modules, cds_domain_results.modules):
             modules.append(module)
             handle_module(data, raw_module, cds_domain_results, module, domains_to_id, function_ids, cds.get_name())
 
