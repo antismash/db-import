@@ -19,6 +19,7 @@ from Bio import Entrez
 import psycopg2
 import psycopg2.extensions
 
+from dbimporter.common.data import read_json
 from dbimporter.common.record_data import RecordData
 from dbimporter.common import (
     getters,
@@ -58,9 +59,8 @@ def main(filename, db_connection):
     connection = psycopg2.connect(db_connection)
     connection.autocommit = False
 
-    with open(filename, encoding="utf-8") as handle:
-        raw_data = json.load(handle)
-    results = antismash.common.serialiser.AntismashResults.from_file(filename)
+    raw_data, results = read_json(filename)
+
     with connection.cursor() as cursor:
         try:
             assembly_id = getters.get_assembly_id(results.records[0])
