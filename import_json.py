@@ -36,7 +36,7 @@ from dbimporter.modules import (
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
-DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
+DB_CONNECTION = "host='localhost' port=5433 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
 
@@ -341,7 +341,11 @@ def handle_ripp(data, protocluster, motif):
     locus_tag = motif.locus_tag
     # since the motifs append which module created them so as to have unique locus tags...
     assert locus_tag.endswith("peptide"), locus_tag
-    locus_tag = locus_tag.rsplit("_", 1)[0]
+    locus_tag, ripp_type = locus_tag.rsplit("_", 1)
+    # multiple protoclusters can like the same motif, so make sure this is the right
+    # combination
+    if protocluster.product != ripp_type:
+        return
 
     params = defaultdict(lambda: None)
     params['protocluster_id'] = data.feature_mapping[protocluster]
