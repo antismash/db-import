@@ -50,7 +50,7 @@ def import_results(data: RecordData) -> None:
         hits = all_mode_hits["ProtoToRegion_RiQ"]
         for protocluster in region.get_unique_protoclusters():
             protocluster_id = data.feature_mapping[protocluster]
-            proto_score = hits.details.details[protocluster.get_protocluster_number()]
+            proto_score = hits.details.details.get(protocluster.get_protocluster_number(), {})
             for scorer in proto_score.values():
                 if scorer.final_score < SCORE_THRESHOLD:
                     continue
