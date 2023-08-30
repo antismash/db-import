@@ -56,6 +56,15 @@ INSERT INTO antismash.clusterblast_hits (rank, region_id, acc, description, simi
 VALUES (%(rank)s, %(region_id)s, %(acc)s, %(description)s, %(similarity)s, %(algorithm_id)s)
 RETURNING clusterblast_hit_id
     """, params)
+    if algorithm == "knownclusterblast" and results.ranking:
+        best = results.ranking[0][0]
+        data.cursor.execute("""
+            UPDATE antismash.regions SET
+                best_mibig_hit_acc = %s,
+                best_mibig_hit_description = %s,
+                best_mibig_hit_similarity = %s
+            WHERE region_id = %s
+        """, (best.accession, best.description, results.svg_builder.hits[0].similarity, data.current_region_id,))
 
 
 def import_region_results(data: RecordData, region: Region, deferred: bool = False) -> None:
