@@ -108,12 +108,22 @@ def handle_region(data: RecordData, sequence_id, region):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--db', default=DB_CONNECTION, help="DB connection string to use (default: %(default)s)")
+    parser.add_argument('--from-filelist', action="store_true", default=False, help="Passed filename is a list of filenames")
     parser.add_argument('filenames', nargs="*")
     args = parser.parse_args()
     total_duration = 0
     total_imports = 0
     successful_imports = 0
-    for filename in args.filenames:
+
+    filenames: list[str] = args.filenames
+    if args.from_filelist:
+        filenames = []
+        for filename in args.filenames:
+            with open(filename, 'r', encoding="utf-8") as handle:
+                content = handle.read()
+                filenames.extend(content.splitlines())
+
+    for filename in filenames:
         start_time = time.time()
         try:
             main(filename, args.db)
