@@ -36,7 +36,7 @@ from dbimporter.modules import (
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
-DB_CONNECTION = "host='localhost' port=5433 user='postgres' password='secret' dbname='antismash'"
+DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' dbname='antismash'"
 Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
 
