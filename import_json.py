@@ -716,7 +716,7 @@ RETURNING module_id"""
     # don't insert the module if the current CDS is not the first CDS of a multi-CDS module,
     # otherwise it'll duplicate
     if secmet_module.is_complete() and cds_name == secmet_module.parent_cds_names[0]:
-        for substrate, monomer in secmet_module.get_substrate_monomer_pairs():
+        for substrate, monomer in set(secmet_module.get_substrate_monomer_pairs()):
             substrate_id = get_substrate(data.cursor, substrate)
             modified = substrate != monomer
             monomer_id = get_or_create_monomer(data.cursor, monomer, substrate_id, modified)
