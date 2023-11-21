@@ -40,7 +40,8 @@ DB_CONNECTION = "host='localhost' port=5432 user='postgres' password='secret' db
 Entrez.email = "kblin@biosustain.dtu.dk"
 REPORTED_TYPES = set()
 
-RIPP_PRODUCTS = set(antismash.detection.hmm_detection.get_supported_cluster_types("loose", category="RiPP"))
+options = antismash.config.build_config([])
+RIPP_PRODUCTS = set(map(lambda r: r.name, filter(lambda r: r.category == "RiPP", antismash.detection.hmm_detection.get_ruleset(options).rules)))
 assert RIPP_PRODUCTS
 
 CANDIDATE_KINDS: dict[str, int] = {}
