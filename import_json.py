@@ -514,6 +514,8 @@ SUBSTRATE_TRANSLATIONS = {
     "mmal": "me-mal",
     "ohmmal": "me-ohmal",
     "redmmal": "me-redmal",
+    "shikimic_acid": "shikimic acid",
+    "fatty_acid": "fatty acid",
 }
 
 
@@ -564,6 +566,12 @@ def parse_specificity(feature, params):
             params['consensus'] = pred
         elif method == "transATor":
             pass  # covered by generic domain subtype handling, but prevent the fallback error
+        elif method == "C activity":
+            params['c_activity'] = pred
+        elif method == "E activity":
+            params['e_activity'] = pred
+        elif method == "Active site motif":
+            params['active_site_motif'] = pred
         else:
             raise ValueError(f"unknown method: {method}")
 
