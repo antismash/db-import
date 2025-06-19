@@ -155,9 +155,7 @@ def get_or_create_genome(rec, cur, assembly_id):
 
 def get_taxid(rec):
     """Extract the taxid from a record."""
-    for feature in rec.get_misc_feature_by_type("source"):
-        if feature.type != 'source':
-            continue
+    for feature in rec.get_sources():
         refs = feature.get_qualifier("db_xref")
         if refs is None:
             return 0
@@ -169,7 +167,7 @@ def get_taxid(rec):
 
 def get_organism(rec):
     """Extract the organism from a record."""
-    for feature in rec.get_misc_feature_by_type("source"):
+    for feature in rec.get_sources():
         organism = feature.get_qualifier("organism")
         if organism:
             return organism[0]
@@ -179,7 +177,7 @@ def get_organism(rec):
 
 def get_strain(rec):
     """Extract the strain from a record."""
-    for feature in rec.get_misc_feature_by_type("source"):
+    for feature in rec.get_sources():
         strain = feature.get_qualifier("strain")
         if strain:
             return strain[0]
@@ -241,14 +239,14 @@ RETURNING cds_id
     assert cds_id
     data.feature_mapping[cds] = cds_id
 
-    genefunctions = data.module_results[antismash.detection.genefunctions.__name__]._tools
+    genefunctions = data.module_results[antismash.detection.genefunctions.__name__].tool_results
 
-    all_smcog_results = genefunctions.get("smcogs")
+    all_smcog_results = genefunctions.smcogs
     hit = all_smcog_results.best_hits.get(cds.get_name())
     if hit:
         create_smcog_hit(data.cursor, hit, cds_id)
 
-    all_resfam_results = genefunctions.get("resist")
+    all_resfam_results = genefunctions.resist
     if all_resfam_results:
         hit = all_resfam_results.best_hits.get(cds.get_name())
         if hit:
@@ -266,17 +264,17 @@ def add_tta_codons(data):
 
 
 def create_resfam_hit(cursor, hit, cds_id):
-    cursor.execute("SELECT resfam_id from antismash.resfams WHERE name = %s", (hit.hit_id,))
+    cursor.execute("SELECT resfam_id from antismash.resfams WHERE name = %s", (hit.reference_id,))
     ret = cursor.fetchone()
     if not ret:
-        raise ValueError("unknown resfam ID: %s" % hit.hit_id)
+        raise ValueError("unknown resfam ID: %s" % hit.reference_id)
     resfam_id = ret[0]
     cursor.execute("INSERT INTO antismash.resfam_domains (score, evalue, resfam_id, cds_id) VALUES (%s, %s, %s, %s)", (hit.bitscore, hit.evalue, resfam_id, cds_id))
 
 
 def create_smcog_hit(cur, hit, cds_id):
     """Create an smCOG hit entry."""
-    smcog_name = hit.hit_id.split(":", 1)[0]
+    smcog_name = hit.reference_id.split(":", 1)[0]
     smcog_score = hit.bitscore
     smcog_evalue = hit.evalue
     smcog_id = get_smcog_id(cur, smcog_name)
