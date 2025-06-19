@@ -123,16 +123,16 @@ def get_or_create_dna_sequence(rec, cur, genome_id, record_no):
     """Fetch existing dna_sequence entry or create a new one."""
     # record level entry
     params = {}
-    params['seq'] = str(rec.seq)
-    params['md5sum'] = hashlib.md5(params['seq'].encode('utf-8')).hexdigest()
     params['accession'] = rec.annotations['accessions'][0]
     params['version'] = rec.annotations.get('sequence_version', '0')
     params['definition'] = rec.description
     params['genome_id'] = genome_id
     params['record_number'] = record_no
+    params['gc_content'] = rec.get_gc_content()
+    params['length'] = len(rec.seq)
 
-    cur.execute("INSERT INTO antismash.dna_sequences (dna, md5, accession, version, definition, genome_id, record_number)"
-                "VALUES (%(seq)s, %(md5sum)s, %(accession)s, %(version)s, %(definition)s, %(genome_id)s, %(record_number)s)"
+    cur.execute("INSERT INTO antismash.dna_sequences (accession, version, definition, genome_id, record_number, gc_content, length)"
+                "VALUES (%(accession)s, %(version)s, %(definition)s, %(genome_id)s, %(record_number)s, %(gc_content)s, %(length)s)"
                 "RETURNING accession;", params)
     return cur.fetchone()[0]
 
